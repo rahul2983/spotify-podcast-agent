@@ -1,0 +1,59 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# C extensions
+*.so
+
+# Distribution / packaging
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+spotify_podcast_agent.egg-info/
+spotify-podcast-agent.egg-info/
+
+# Virtual environments
+podcast-agent-env/
+venv/
+ENV/
+env/
+.env
+
+# Spotify authentication cache
+.cache
+.cache-*
+
+# VS Code
+.vscode/
+
+# PyCharm
+.idea/
+
+# Logs
+*.log
+podcast_agent.log*
+
+# OpenAI API key and other secrets
+.env
+
+# OS specific files
+.DS_Store
+Thumbs.db
+
+# Backup files
+*~
+*.bak
