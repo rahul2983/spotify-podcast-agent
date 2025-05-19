@@ -88,6 +88,10 @@ class AgentConfigUpdate(BaseModel):
     max_episodes_per_run: Optional[int] = None
     use_vector_memory: Optional[bool] = None
 
+class EmailSettings(BaseModel):
+    """Model for email notification settings"""
+    email: str
+
 # API Routes
 @app.get("/")
 def read_root():
@@ -164,11 +168,21 @@ def get_status():
         # Get Spotify connection status
         spotify_status = "connected" if agent.spotify.get_current_user_profile() else "disconnected"
         
+        # Check if there's an active device
+        has_active_device = agent.check_spotify_active_device()
+        
+        # Get pending episodes count if queue manager is available
+        pending_count = 0
+        if hasattr(agent, 'queue_manager') and agent.queue_manager:
+            pending_count = len(agent.queue_manager.get_pending_episodes())
+        
         return {
             "status": "online",
             "spotify_status": spotify_status,
+            "active_device": has_active_device,
             "preferences_count": len(agent.get_podcast_preferences()),
             "processed_episodes_count": len(agent.processed_episodes),
+            "pending_episodes_count": pending_count,
             "last_run": "Not available" # This would be stored and retrieved in a real implementation
         }
     except Exception as e:
@@ -177,6 +191,63 @@ def get_status():
             "status": "error",
             "message": str(e)
         }
+
+# New endpoint to reset processed episodes
+@app.post("/reset-episodes")
+def reset_episodes():
+    """Reset the list of processed episodes"""
+    try:
+        agent.reset_processed_episodes()
+        return {
+            "status": "success", 
+            "message": "Reset processed episodes list", 
+            "timestamp": datetime.now().isoformat()
+        }
+    except Exception as e:
+        logger.error(f"Error resetting episodes: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+# New endpoint to process pending episodes
+@app.post("/process-pending")
+def process_pending():
+    """Process any pending episodes from previous runs"""
+    try:
+        result = agent.process_pending_episodes()
+        return result
+    except Exception as e:
+        logger.error(f"Error processing pending episodes: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+# New endpoint to check Spotify devices
+@app.get("/devices")
+def get_devices():
+    """Get available Spotify devices"""
+    try:
+        devices = agent.spotify.get_devices()
+        return devices
+    except Exception as e:
+        logger.error(f"Error getting Spotify devices: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+# New endpoint to start playback
+@app.post("/start-playback")
+def start_playback(device_id: Optional[str] = None):
+    """Start playback on a Spotify device"""
+    try:
+        success = agent.spotify.start_playback(device_id=device_id)
+        if success:
+            return {
+                "status": "success",
+                "message": f"Started playback on device {device_id if device_id else 'default'}"
+            }
+        else:
+            raise HTTPException(
+                status_code=500,
+                detail="Failed to start playback"
+            )
+    except Exception as e:
+        logger.error(f"Error starting playback: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 # Start scheduler thread when app starts
 @app.on_event("startup")
@@ -187,6 +258,7 @@ def on_startup():
 
 def start_api():
     """Start the API server"""
+    # Use port 8080 instead of 8000
     uvicorn.run(app, host="0.0.0.0", port=8000)
 
 if __name__ == "__main__":

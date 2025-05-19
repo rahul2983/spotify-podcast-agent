@@ -1,6 +1,12 @@
 from spotify_agent.config import AgentConfig, PodcastPreference
 from spotify_agent.spotify_client import SpotifyClient
 from spotify_agent.llm_agent import PodcastLLMAgent
+try:
+    from spotify_agent.queue_manager import QueueManager
+    queue_manager_available = True
+except ImportError:
+    queue_manager_available = False
+    
 from typing import List, Dict, Any, Optional
 import logging
 import datetime
@@ -36,6 +42,9 @@ class PodcastAgent:
         self.llm_agent = PodcastLLMAgent(
             openai_api_key=config.openai_api_key
         )
+        
+        # Initialize queue manager if available
+        self.queue_manager = QueueManager() if queue_manager_available else None
         
         # Episode memory to avoid recommending duplicates
         self.processed_episodes = set()
@@ -197,9 +206,39 @@ class PodcastAgent:
         
         return relevant_episodes
     
+    def check_spotify_active_device(self) -> bool:
+        """Check if there's an active Spotify device available"""
+        try:
+            devices = self.spotify.get_devices()
+            
+            if not devices or not devices.get('devices'):
+                logger.warning("No Spotify devices found")
+                return False
+                
+            for device in devices.get('devices', []):
+                if device.get('is_active'):
+                    logger.info(f"Found active Spotify device: {device.get('name')}")
+                    return True
+                    
+            logger.warning("No active Spotify devices found")
+            return False
+            
+        except Exception as e:
+            logger.error(f"Error checking Spotify devices: {str(e)}")
+            return False
+    
     def add_episodes_to_queue(self, episodes: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         """Add relevant episodes to the Spotify queue"""
         logger.info(f"Adding {len(episodes)} episodes to queue...")
+        
+        # Check if an active device is available
+        has_active_device = self.check_spotify_active_device()
+        
+        # If no active device and queue manager is available, store episodes for later
+        if not has_active_device and self.queue_manager and episodes:
+            logger.info("No active Spotify device found - storing episodes for later")
+            self.queue_manager.add_pending_episodes(episodes)
+            return []
         
         added_episodes = []
         
@@ -221,11 +260,89 @@ class PodcastAgent:
                     logger.info(f"Added episode to queue: {episode.get('name', 'Unknown')}")
                 else:
                     logger.error(f"Failed to add episode to queue: {episode.get('name', 'Unknown')}")
+                    
+                    # If queue manager is available, store failed episodes
+                    if self.queue_manager:
+                        self.queue_manager.add_pending_episodes([episode_data])
+                        
             except Exception as e:
                 logger.error(f"Error adding episode to queue: {str(e)}")
+                
+                # If queue manager is available, store failed episodes
+                if self.queue_manager:
+                    self.queue_manager.add_pending_episodes([episode_data])
+                    
                 continue
         
         return added_episodes
+    
+    def process_pending_episodes(self) -> Dict[str, Any]:
+        """Process any pending episodes from previous runs"""
+        if not self.queue_manager:
+            return {
+                'status': 'warning',
+                'message': 'Queue manager not available',
+                'timestamp': datetime.datetime.now().isoformat()
+            }
+            
+        pending_episodes = self.queue_manager.get_pending_episodes()
+        if not pending_episodes:
+            return {
+                'status': 'success',
+                'message': 'No pending episodes to process',
+                'timestamp': datetime.datetime.now().isoformat()
+            }
+            
+        logger.info(f"Processing {len(pending_episodes)} pending episodes")
+        
+        # Check if an active device is available
+        has_active_device = self.check_spotify_active_device()
+        
+        if not has_active_device:
+            return {
+                'status': 'warning',
+                'message': 'No active Spotify device found - cannot process pending episodes',
+                'timestamp': datetime.datetime.now().isoformat()
+            }
+            
+        # Try to add pending episodes to queue
+        added_episodes = []
+        added_episode_ids = []
+        
+        for episode_data in pending_episodes:
+            try:
+                episode = episode_data['episode']
+                
+                # Safety check: Ensure episode has the required URI
+                if 'uri' not in episode:
+                    logger.error(f"Cannot add pending episode to queue - missing URI: {episode.get('name', 'Unknown')}")
+                    continue
+                    
+                episode_uri = episode['uri']
+                
+                success = self.spotify.add_to_queue(episode_uri)
+                
+                if success:
+                    added_episodes.append(episode_data)
+                    added_episode_ids.append(episode['id'])
+                    logger.info(f"Added pending episode to queue: {episode.get('name', 'Unknown')}")
+                else:
+                    logger.error(f"Failed to add pending episode to queue: {episode.get('name', 'Unknown')}")
+                    
+            except Exception as e:
+                logger.error(f"Error adding pending episode to queue: {str(e)}")
+                continue
+                
+        # Remove successfully added episodes from pending list
+        if added_episode_ids:
+            self.queue_manager.remove_processed_episodes(added_episode_ids)
+            
+        return {
+            'status': 'success',
+            'message': f'Processed {len(added_episodes)} of {len(pending_episodes)} pending episodes',
+            'episodes': added_episodes,
+            'timestamp': datetime.datetime.now().isoformat()
+        }
     
     def run(self) -> Dict[str, Any]:
         """Run the podcast discovery and queueing process"""
@@ -240,6 +357,14 @@ class PodcastAgent:
             }
         
         try:
+            # Step 0: Process any pending episodes first
+            if self.queue_manager:
+                pending_result = self.process_pending_episodes()
+                if pending_result['status'] == 'success' and pending_result.get('episodes'):
+                    # If we successfully processed some pending episodes, we might want to stop here
+                    # to avoid adding too many episodes at once
+                    return pending_result
+            
             # Step 1: Discover new relevant episodes
             relevant_episodes = self.check_for_new_episodes()
             

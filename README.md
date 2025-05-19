@@ -11,6 +11,7 @@ An agentic AI system that automatically discovers, evaluates, and queues podcast
 - Runs on a schedule (daily or weekly)
 - Provides summarizations of episodes
 - RESTful API for integration with other tools
+- **NEW**: Offline queuing system for handling no-device scenarios
 
 ## Setup Instructions
 
@@ -73,14 +74,16 @@ Replace the placeholder values with your actual API keys and credentials.
 
 ## Running the Agent
 
-### Important: Active Spotify Device Required
+### Scheduled Operation with Queue Manager
 
-**Before running the agent, make sure to:**
-1. Open the Spotify app on your computer, phone, or web browser
-2. Start playing any song or podcast
-3. Keep Spotify running while the agent is working
+The agent now includes a queue management system that allows it to run on a schedule even when no Spotify device is active:
 
-This is required for the agent to be able to add episodes to your queue. Without an active Spotify device, the API calls will fail.
+1. When the agent runs on schedule and no device is available, it stores recommended episodes to a local queue
+2. The next time you open Spotify and a device becomes active, you can process the pending episodes:
+   ```bash
+   curl -X POST http://127.0.0.1:8000/process-pending
+   ```
+3. Alternatively, start a scheduled task that periodically checks for an active device and processes the queue when available
 
 ### API Mode (Recommended)
 
@@ -160,6 +163,19 @@ If you want the agent to reconsider episodes it has processed before:
 curl -X POST http://127.0.0.1:8000/reset-episodes
 ```
 
+### Working with Spotify Devices
+
+```bash
+# Get available Spotify devices
+curl -X GET http://127.0.0.1:8000/devices
+
+# Start playback on a device (needed for adding to queue)
+curl -X POST http://127.0.0.1:8000/start-playback
+
+# Process pending episodes (when a device is available)
+curl -X POST http://127.0.0.1:8000/process-pending
+```
+
 ## Project Structure
 
 ```
@@ -170,6 +186,7 @@ spotify-podcast-agent/
 │   ├── spotify_client.py # Spotify API client
 │   ├── llm_agent.py      # LLM-based evaluation
 │   ├── agent.py          # Main agent orchestration
+│   ├── queue_manager.py  # Queue management for offline mode
 │   └── api.py            # FastAPI web API
 ├── main.py               # Entry point script
 ├── requirements.txt      # Dependencies
@@ -192,9 +209,9 @@ If you encounter authentication issues:
 
 If you see "No active device found" errors:
 
-1. Make sure Spotify is open and playing something
-2. This creates an active device that the agent can target
-3. Run the agent again after Spotify is playing
+1. The agent will now store episodes in a pending queue when no device is available
+2. When you open Spotify, you can process pending episodes with `curl -X POST http://127.0.0.1:8000/process-pending`
+3. You can also start playback directly: `curl -X POST http://127.0.0.1:8000/start-playback`
 
 ### Error Processing Episodes
 
@@ -212,25 +229,82 @@ If you encounter "module not found" errors:
 2. Install all dependencies: `pip install -r requirements.txt`
 3. Check that you're running the script from the project root directory
 
-## Advanced Features and Extensions
+## Scheduling Options for Fully Automated Operation
 
-Here are some ways to extend the agent's functionality:
+### 1. System Scheduler with Multiple Steps
+
+Set up your system scheduler (cron, Task Scheduler, etc.) to:
+
+1. Start Spotify (script or app)
+2. Wait a few seconds for Spotify to initialize
+3. Run a script that calls the agent's API
+
+Example cron job script:
+```bash
+#!/bin/bash
+# Start Spotify app (MacOS example)
+open -a Spotify
+
+# Wait for Spotify to start
+sleep 10
+
+# Start playback
+curl -X POST http://127.0.0.1:8000/start-playback
+
+# Wait for playback to be active
+sleep 5
+
+# Process any pending episodes first
+curl -X POST http://127.0.0.1:8000/process-pending
+
+# Then run the agent for new episodes
+curl -X POST http://127.0.0.1:8000/run
+```
+
+### 2. Service Integration
+
+For users with smart home systems or automation tools:
+
+1. Set up a morning routine with your smart assistant (e.g., "Alexa, start my morning podcast")
+2. Have this routine start Spotify and trigger the podcast agent
+3. The agent will add new episodes to your queue
+
+### 3. Periodic Queue Processing
+
+The simplest approach:
+
+1. Let the agent run on its own schedule (building up a queue of episodes)
+2. Whenever you open Spotify to listen to podcasts, manually process the queue:
+   ```bash
+   curl -X POST http://127.0.0.1:8000/process-pending
+   ```
+3. Or create a browser extension or menu bar app to do this with a single click
+
+## Advanced Features and Extensions
 
 ### 1. Episode Summarization (Already Implemented)
 - The agent automatically generates summaries of episodes
 
-### 2. Transcript Analysis
-- Add functionality to download and analyze episode transcripts
-- Extract key topics and themes for better relevance evaluation
+### 2. Queue Management System (New)
+- The agent stores episodes when no Spotify device is available
+- Episodes are queued for later processing
+- You can process the queue when a device becomes available
 
-### 3. Calendar Integration
-- Connect to Google Calendar or other calendar services
-- Queue shorter podcasts for commute times
-- Schedule longer episodes for dedicated listening time
+### 3. Device Management and Playback Control
+- The agent can now start playback on Spotify devices
+- It can check for available devices and their status
+- This enables more automated workflows
 
-### 4. Smarter Recommendations
-- Implement feedback mechanisms to learn from your listening habits
-- Track which queued episodes you actually listen to vs. skip
+### 4. Custom Scheduling
+- Set up a system-level scheduler to work with the agent
+- Create multi-step routines that handle all aspects of podcast management
+- Integrate with smart home systems or automation tools
+
+### 5. Future Extensions
+- **Transcript Analysis**: Download and analyze episode transcripts
+- **Calendar Integration**: Connect to Google Calendar for scheduling episodes
+- **Listening History**: Track listened episodes to improve recommendations
+- **Mobile App**: Create a companion mobile app for easier control
 
 ## License
 

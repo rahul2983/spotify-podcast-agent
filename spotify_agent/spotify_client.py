@@ -76,3 +76,66 @@ class SpotifyClient:
         except Exception as e:
             logger.error(f"Error getting user profile: {str(e)}")
             return None
+            
+    def get_devices(self) -> Dict[str, Any]:
+        """Get the user's available Spotify devices"""
+        try:
+            return self.sp.devices()
+        except Exception as e:
+            logger.error(f"Error getting devices: {str(e)}")
+            return {"devices": []}
+            
+    def start_playback(self, device_id: Optional[str] = None) -> bool:
+        """Start playback on a device"""
+        try:
+            # Try to resume playback if possible
+            self.sp.start_playback(device_id=device_id)
+            logger.info(f"Successfully started playback on device {device_id if device_id else 'default'}")
+            return True
+        except Exception as e:
+            # If we can't resume, try to play a fallback track
+            try:
+                # Find a track to play - user's first saved track or a popular track
+                tracks = self.sp.current_user_saved_tracks(limit=1).get('items', [])
+                
+                if tracks:
+                    track_uri = tracks[0]['track']['uri']
+                else:
+                    # Default to a popular track if user has no saved tracks
+                    results = self.sp.search(q='genre:pop', limit=1, type='track')
+                    track_uri = results['tracks']['items'][0]['uri']
+                
+                self.sp.start_playback(device_id=device_id, uris=[track_uri])
+                logger.info(f"Started playback with fallback track on device {device_id if device_id else 'default'}")
+                return True
+                
+            except Exception as inner_e:
+                logger.error(f"Error starting playback: {str(e)} -> {str(inner_e)}")
+                return False
+                
+    def transfer_playback(self, device_id: Optional[str] = None) -> bool:
+        """Transfer playback to another device"""
+        try:
+            # If no device_id provided, get available devices
+            if not device_id:
+                devices = self.get_devices().get('devices', [])
+                if not devices:
+                    logger.error("No available devices to transfer playback to")
+                    return False
+                    
+                # Filter for available (not active) devices
+                available_devices = [d for d in devices if not d.get('is_active', False)]
+                if not available_devices:
+                    logger.error("No inactive devices available to transfer playback to")
+                    return False
+                    
+                device_id = available_devices[0]['id']
+                
+            # Transfer playback to the device
+            self.sp.transfer_playback(device_id=device_id, force_play=True)
+            logger.info(f"Successfully transferred playback to device {device_id}")
+            return True
+            
+        except Exception as e:
+            logger.error(f"Error transferring playback: {str(e)}")
+            return False
