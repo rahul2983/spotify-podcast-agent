@@ -1,0 +1,7 @@
+"""
+MCP-based Podcast Agent
+"""
+
+from .podcast_agent import MCPPodcastAgent
+
+__all__ = ['MCPPodcastAgent']

@@ -1,17 +1,82 @@
-# Spotify Podcast Agent
+# Spotify Podcast Agent (MCP-Enabled)
 
-An agentic AI system that automatically discovers, evaluates, and queues podcast episodes in Spotify based on your preferences.
+An advanced agentic AI system that automatically discovers, evaluates, and queues podcast episodes in Spotify based on your preferences. Now built with **Model Context Protocol (MCP)** architecture for enhanced modularity, extensibility, and maintainability.
+
+## 🚀 What's New in v2.0
+
+### **MCP Architecture**
+- **Modular Design**: Separate MCP servers for Spotify, LLM, and Queue operations
+- **Standardized Communication**: All components communicate via MCP protocol
+- **Enhanced Extensibility**: Easy to add new integrations (calendar, email, etc.)
+- **Better Error Handling**: Graceful degradation and comprehensive logging
+- **Future-Proof**: Based on emerging industry standards
+
+### **New Features**
+- **MCP Server Introspection**: Discover available tools and resources
+- **Direct MCP Tool Calling**: Call individual server functions via API
+- **Enhanced Status Reporting**: Comprehensive system health monitoring
+- **Async-First Design**: Fully asynchronous architecture for better performance
+- **Improved Debugging**: MCP protocol provides structured logging and debugging
 
 ## Features
 
-- Automatically checks for new episodes from your favorite podcast shows
-- Discovers podcasts based on topics of interest
-- Uses AI to evaluate episode relevance based on your preferences
-- Adds selected episodes to your Spotify queue
-- Runs on a schedule (daily or weekly)
-- Provides summarizations of episodes
-- RESTful API for integration with other tools
-- **NEW**: Offline queuing system for handling no-device scenarios
+### Core Functionality
+- ✅ Automatically checks for new episodes from your favorite podcast shows
+- ✅ Discovers podcasts based on topics of interest
+- ✅ Uses AI to evaluate episode relevance based on your preferences
+- ✅ Adds selected episodes to your Spotify queue
+- ✅ Runs on a schedule (daily or weekly)
+- ✅ Provides AI-generated episode summaries
+- ✅ RESTful API for integration with other tools
+- ✅ Offline queuing system for handling no-device scenarios
+
+### MCP-Enhanced Features
+- 🆕 **Modular MCP Servers**: Spotify, LLM, and Queue operations as separate services
+- 🆕 **MCP Tool Discovery**: List and call available tools across all servers
+- 🆕 **Resource Management**: Structured access to Spotify data and queue information
+- 🆕 **Enhanced API**: Direct MCP server interaction endpoints
+- 🆕 **Better Monitoring**: Comprehensive status reporting across all components
+- 🆕 **Debugging Support**: MCP protocol debugging and introspection
+
+## Architecture Overview
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                    MCP Spotify Podcast Agent                    │
+├─────────────────────────────────────────────────────────────────┤
+│                        FastAPI Server                          │
+│                     (mcp_api/api.py)                           │
+├─────────────────────────────────────────────────────────────────┤
+│                       MCP Agent                                │
+│                 (mcp_agent/podcast_agent.py)                   │
+│                                                                 │
+│  ┌─────────────────── MCP Client ───────────────────────────┐  │
+│  │                                                          │  │
+│  │  ┌──────────────┐ ┌──────────────┐ ┌──────────────────┐  │  │
+│  │  │   Spotify    │ │     LLM      │ │      Queue       │  │  │
+│  │  │ MCP Server   │ │ MCP Server   │ │   MCP Server     │  │  │
+│  │  │              │ │              │ │                  │  │  │
+│  │  │ • Search     │ │ • Evaluate   │ │ • Add Pending    │  │  │
+│  │  │ • Episodes   │ │ • Summarize  │ │ • Get Pending    │  │  │
+│  │  │ • Queue      │ │ • Reason     │ │ • Remove Proc.   │  │  │
+│  │  │ • Devices    │ │              │ │                  │  │  │
+│  │  └──────────────┘ └──────────────┘ └──────────────────┘  │  │
+│  └─────────────────────────────────────────────────────────┘  │
+├─────────────────────────────────────────────────────────────────┤
+│            External Services (Spotify API, OpenAI)             │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+## 📋 Documentation
+
+### Architecture
+- **[Interactive Architecture Diagram](./docs/architecture.html)** - Comprehensive MCP architecture visualization
+- **[Documentation Hub](./docs/)** - Complete technical documentation
+
+### Quick Links
+- [API Usage](#api-usage) - REST API examples
+- [Production Deployment](#deployment) - Deployment guides
+- [MCP Protocol](#mcp-specific-endpoints) - Model Context Protocol usage
 
 ## Setup Instructions
 
@@ -40,15 +105,9 @@ source podcast-agent-env/bin/activate  # On Windows: podcast-agent-env\Scripts\a
 pip install -r requirements.txt
 ```
 
-All required packages should be installed, including:
-- langchain and langchain-community
-- openai
-- spotipy
-- pydantic
-- python-dotenv
-- fastapi
-- uvicorn
-- schedule
+All required packages will be installed, including:
+- **Core**: langchain, openai, spotipy, pydantic, python-dotenv, fastapi, uvicorn
+- **MCP**: asyncio-mqtt, websockets, jsonrpc-base, typing-extensions
 
 ### Step 3: Set Up Spotify Developer App
 
@@ -61,36 +120,27 @@ All required packages should be installed, including:
 
 ### Step 4: Configure Environment Variables
 
-Create a `.env` file in the project root with the following contents:
+Create a `.env` file in the project root:
 
-```
+```env
 OPENAI_API_KEY=your_openai_api_key
 SPOTIFY_CLIENT_ID=your_spotify_client_id
 SPOTIFY_CLIENT_SECRET=your_spotify_client_secret
 SPOTIFY_REDIRECT_URI=http://127.0.0.1:8000/callback
 ```
 
-Replace the placeholder values with your actual API keys and credentials.
-
 ## Running the Agent
-
-### Scheduled Operation with Queue Manager
-
-The agent now includes a queue management system that allows it to run on a schedule even when no Spotify device is active:
-
-1. When the agent runs on schedule and no device is available, it stores recommended episodes to a local queue
-2. The next time you open Spotify and a device becomes active, you can process the pending episodes:
-   ```bash
-   curl -X POST http://127.0.0.1:8000/process-pending
-   ```
-3. Alternatively, start a scheduled task that periodically checks for an active device and processes the queue when available
 
 ### API Mode (Recommended)
 
-This starts a web API that you can interact with:
+Start the MCP-enabled web API:
 
 ```bash
+# Standard mode
 python main.py --mode api
+
+# With MCP debugging enabled
+python main.py --mode api --mcp-debug
 ```
 
 The API will be available at `http://127.0.0.1:8000`
@@ -108,72 +158,143 @@ python main.py --mode cli
 The first time you run the application:
 
 1. A browser window will open asking you to log in to Spotify
-2. After logging in, Spotify will ask you to authorize the app with the requested permissions
-3. Once you approve, Spotify will redirect to the callback URL
-4. The application will automatically capture the authorization code and proceed
-5. Subsequent runs will use the cached credentials
+2. After logging in, authorize the app with the requested permissions
+3. The app will capture the authorization code and proceed
+4. Subsequent runs will use cached credentials
 
 ## API Usage
 
-### Add Podcast Preferences
+### Core Podcast Management
 
 ```bash
-# Add a specific podcast show
-curl -X POST http://127.0.0.1:8000/preferences \
-  -H "Content-Type: application/json" \
-  -d '{"show_name": "The Tim Ferriss Show"}'
+# Test server connectivity
+curl http://127.0.0.1:8000/
 
-# Add by topics
-curl -X POST http://127.0.0.1:8000/preferences \
-  -H "Content-Type: application/json" \
-  -d '{"topics": ["artificial intelligence", "technology", "startup"]}'
-
-# Add with duration constraints
-curl -X POST http://127.0.0.1:8000/preferences \
-  -H "Content-Type: application/json" \
-  -d '{"show_name": "The Daily", "min_duration_minutes": 10, "max_duration_minutes": 30}'
-```
-
-### Run the Agent Manually
-
-```bash
-curl -X POST http://127.0.0.1:8000/run
-```
-
-### Get Current Preferences
-
-```bash
+# Get current preferences (empty initially)
 curl http://127.0.0.1:8000/preferences
+
+# Add specific podcast show with duration constraints
+curl -X POST http://127.0.0.1:8000/preferences -H "Content-Type: application/json" -d '{"show_name": "The Tim Ferriss Show", "min_duration_minutes": 30, "max_duration_minutes": 120}'
+
+# Add preference by topics with minimum duration
+curl -X POST http://127.0.0.1:8000/preferences -H "Content-Type: application/json" -d '{"topics": ["artificial intelligence", "technology", "startup"], "min_duration_minutes": 15}'
+
+# Add preference for specific show ID (more reliable than name)
+curl -X POST http://127.0.0.1:8000/preferences -H "Content-Type: application/json" -d '{"show_id": "4rOoJ6Egrf8K2IrywzwOMk", "min_duration_minutes": 10}'
+
+# Add tech news preference with short duration
+curl -X POST http://127.0.0.1:8000/preferences -H "Content-Type: application/json" -d '{"show_name": "Daily Tech Headlines", "min_duration_minutes": 5, "max_duration_minutes": 30}'
+
+# Add business/entrepreneurship topics
+curl -X POST http://127.0.0.1:8000/preferences -H "Content-Type: application/json" -d '{"topics": ["business", "entrepreneurship", "investing"], "min_duration_minutes": 20, "max_duration_minutes": 60}'
+
+# View all configured preferences
+curl http://127.0.0.1:8000/preferences
+
+# Run the agent to discover and queue episodes
+curl -X POST http://127.0.0.1:8000/run
+
+# Get comprehensive system status
+curl http://127.0.0.1:8000/status
 ```
 
-### Update Configuration
+### MCP-Specific Endpoints
+
+#### Discover MCP Servers and Capabilities
 
 ```bash
-# Change relevance threshold and max episodes per run
-curl -X PUT http://127.0.0.1:8000/config \
-  -H "Content-Type: application/json" \
-  -d '{"relevance_threshold": 0.5, "max_episodes_per_run": 5}'
+# List all MCP servers and their tools/resources
+curl http://127.0.0.1:8000/mcp/servers
 ```
 
-### Reset Processed Episodes
-
-If you want the agent to reconsider episodes it has processed before:
-
-```bash
-curl -X POST http://127.0.0.1:8000/reset-episodes
+Example response:
+```json
+{
+  "servers": [
+    {
+      "name": "spotify",
+      "tools": [
+        {
+          "name": "search_podcasts",
+          "description": "Search for podcasts by query",
+          "input_schema": {...}
+        },
+        {
+          "name": "get_show_episodes",
+          "description": "Get episodes for a specific show",
+          "input_schema": {...}
+        }
+      ],
+      "resources": [
+        {
+          "uri": "spotify://user/profile",
+          "name": "User Profile",
+          "description": "Current user's Spotify profile"
+        }
+      ]
+    }
+  ]
+}
 ```
 
-### Working with Spotify Devices
+#### Call MCP Tools Directly
 
 ```bash
+# Search for podcasts via Spotify MCP server
+curl -X POST http://127.0.0.1:8000/mcp/call -H "Content-Type: application/json" -d '{"server_name": "spotify", "tool_name": "search_podcasts", "arguments": {"query": "artificial intelligence", "limit": 3}}'
+
+# Get episodes for a specific show
+curl -X POST http://127.0.0.1:8000/mcp/call -H "Content-Type: application/json" -d '{"server_name": "spotify", "tool_name": "get_show_episodes", "arguments": {"show_id": "4rOoJ6Egrf8K2IrywzwOMk", "limit": 5}}'
+
 # Get available Spotify devices
-curl -X GET http://127.0.0.1:8000/devices
+curl -X POST http://127.0.0.1:8000/mcp/call -H "Content-Type: application/json" -d '{"server_name": "spotify", "tool_name": "get_devices", "arguments": {}}'
 
-# Start playback on a device (needed for adding to queue)
+# Add episode to queue via MCP
+curl -X POST http://127.0.0.1:8000/mcp/call -H "Content-Type: application/json" -d '{"server_name": "spotify", "tool_name": "add_to_queue", "arguments": {"episode_uri": "spotify:episode:4TnieuwqFfVL0YlKKzPacJ"}}'
+
+# Evaluate episode via LLM MCP server (example with mock data)
+curl -X POST http://127.0.0.1:8000/mcp/call -H "Content-Type: application/json" -d '{"server_name": "llm", "tool_name": "evaluate_episode", "arguments": {"episode": {"name": "AI Future", "description": "Discussion about AI"}, "preferences": [{"topics": ["artificial intelligence"]}]}}'
+
+# Generate episode summary via LLM MCP server
+curl -X POST http://127.0.0.1:8000/mcp/call -H "Content-Type: application/json" -d '{"server_name": "llm", "tool_name": "generate_summary", "arguments": {"episode": {"name": "Tech Trends 2025", "description": "Latest technology trends"}}}'
+
+# Get pending episodes via Queue MCP server
+curl -X POST http://127.0.0.1:8000/mcp/call -H "Content-Type: application/json" -d '{"server_name": "queue", "tool_name": "get_pending", "arguments": {}}'
+
+# Add episodes to pending queue
+curl -X POST http://127.0.0.1:8000/mcp/call -H "Content-Type: application/json" -d '{"server_name": "queue", "tool_name": "add_pending", "arguments": {"episodes": [{"episode": {"id": "123", "name": "Test Episode"}}]}}'
+```
+
+#### Access MCP Resources
+
+```bash
+# Get user profile from Spotify MCP server
+curl "http://127.0.0.1:8000/mcp/resources/spotify?uri=spotify://user/profile"
+
+# Get available Spotify devices
+curl "http://127.0.0.1:8000/mcp/resources/spotify?uri=spotify://devices"
+
+# Get recently played tracks and episodes
+curl "http://127.0.0.1:8000/mcp/resources/spotify?uri=spotify://user/recently_played"
+
+# Get pending episodes queue
+curl "http://127.0.0.1:8000/mcp/resources/queue?uri=queue://pending"
+```
+
+### Queue Management
+
+```bash
+# Process pending episodes (when device becomes available)
+curl -X POST http://127.0.0.1:8000/process-pending
+
+# Get available Spotify devices
+curl http://127.0.0.1:8000/devices
+
+# Start playback on default device
 curl -X POST http://127.0.0.1:8000/start-playback
 
-# Process pending episodes (when a device is available)
-curl -X POST http://127.0.0.1:8000/process-pending
+# Reset processed episodes list
+curl -X POST http://127.0.0.1:8000/reset-episodes
 ```
 
 ## Project Structure
@@ -182,130 +303,133 @@ curl -X POST http://127.0.0.1:8000/process-pending
 spotify-podcast-agent/
 ├── spotify_agent/
 │   ├── __init__.py
-│   ├── config.py         # Configuration models
-│   ├── spotify_client.py # Spotify API client
-│   ├── llm_agent.py      # LLM-based evaluation
-│   ├── agent.py          # Main agent orchestration
-│   ├── queue_manager.py  # Queue management for offline mode
-│   └── api.py            # FastAPI web API
-├── main.py               # Entry point script
-├── requirements.txt      # Dependencies
-├── setup.py              # Package setup file
-├── .env                  # Environment variables (create this)
-└── README.md             # This file
+│   ├── config.py                    # Configuration models
+│   ├── spotify_client.py            # Spotify API client
+│   ├── llm_agent.py                 # LLM-based evaluation
+│   ├── queue_manager.py             # Queue management
+│   │
+│   ├── mcp_server/                  # MCP Protocol Implementation
+│   │   ├── __init__.py
+│   │   ├── protocol.py              # Core MCP protocol classes
+│   │   ├── spotify_server.py        # Spotify MCP server
+│   │   ├── llm_server.py            # LLM MCP server
+│   │   └── queue_server.py          # Queue MCP server
+│   │
+│   ├── mcp_agent/                   # MCP-based Agent
+│   │   ├── __init__.py
+│   │   └── podcast_agent.py         # Main MCP agent orchestration
+│   │
+│   ├── mcp_api/                     # MCP-enabled API
+│   │   ├── __init__.py
+│   │   └── api.py                   # FastAPI with MCP endpoints
+│   │
+│   └── agent.py                     # Legacy agent (backward compatibility)
+│
+├── main.py                          # Entry point with MCP support
+├── requirements.txt                 # Dependencies (including MCP)
+├── setup.py                         # Package setup
+├── .env                             # Environment variables
+└── README.md                        # This file
+```
+
+## Advanced Usage
+
+### MCP Server Development
+
+You can extend the system by creating new MCP servers:
+
+```python
+from spotify_agent.mcp_server.protocol import MCPServer, MCPTool
+
+class CalendarMCPServer(MCPServer):
+    def __init__(self, calendar_client):
+        super().__init__("calendar", "1.0.0")
+        self.calendar = calendar_client
+        self._register_tools()
+    
+    def _register_tools(self):
+        self.tools.update({
+            "schedule_listening_time": MCPTool(
+                name="schedule_listening_time",
+                description="Schedule podcast listening time",
+                input_schema={
+                    "type": "object",
+                    "properties": {
+                        "datetime": {"type": "string"},
+                        "duration_minutes": {"type": "integer"}
+                    }
+                }
+            )
+        })
+    
+    async def _execute_tool(self, name: str, arguments: dict):
+        if name == "schedule_listening_time":
+            # Implementation here
+            pass
+```
+
+### Custom MCP Tool Chains
+
+Create complex workflows by chaining MCP tools:
+
+```python
+async def discover_and_schedule_podcasts(agent):
+    # 1. Search for podcasts
+    podcasts = await agent.mcp_client.send_request(
+        "spotify", "tools/call",
+        {"name": "search_podcasts", "arguments": {"query": "tech news"}}
+    )
+    
+    # 2. Evaluate episodes
+    for podcast in podcasts:
+        evaluation = await agent.mcp_client.send_request(
+            "llm", "tools/call",
+            {"name": "evaluate_episode", "arguments": {"episode": podcast}}
+        )
+        
+        # 3. Schedule if relevant
+        if evaluation["relevance_score"] > 0.8:
+            await agent.mcp_client.send_request(
+                "calendar", "tools/call",
+                {"name": "schedule_listening_time", "arguments": {...}}
+            )
 ```
 
 ## Troubleshooting
 
-### Spotify Authentication
+### MCP-Specific Issues
 
-If you encounter authentication issues:
-
-1. Ensure your Spotify Developer app has the correct redirect URI
-2. Check that your credentials in the `.env` file are correct
-3. The first time you run the agent, you'll need to authorize via a browser window
-
-### No Active Device Error
-
-If you see "No active device found" errors:
-
-1. The agent will now store episodes in a pending queue when no device is available
-2. When you open Spotify, you can process pending episodes with `curl -X POST http://127.0.0.1:8000/process-pending`
-3. You can also start playback directly: `curl -X POST http://127.0.0.1:8000/start-playback`
-
-### Error Processing Episodes
-
-If you see errors like "episode not a dictionary" or missing 'id' key:
-
-1. This might be due to inconsistent data from the Spotify API
-2. The agent has built-in protection against these errors now
-3. Check the logs (`podcast_agent.log`) for specific details about which podcasts are causing issues
-
-### Module Not Found Errors
-
-If you encounter "module not found" errors:
-
-1. Make sure you've activated your virtual environment
-2. Install all dependencies: `pip install -r requirements.txt`
-3. Check that you're running the script from the project root directory
-
-## Scheduling Options for Fully Automated Operation
-
-### 1. System Scheduler with Multiple Steps
-
-Set up your system scheduler (cron, Task Scheduler, etc.) to:
-
-1. Start Spotify (script or app)
-2. Wait a few seconds for Spotify to initialize
-3. Run a script that calls the agent's API
-
-Example cron job script:
+#### MCP Server Communication Errors
 ```bash
-#!/bin/bash
-# Start Spotify app (MacOS example)
-open -a Spotify
+# Check MCP server status
+curl http://127.0.0.1:8000/mcp/servers
 
-# Wait for Spotify to start
-sleep 10
-
-# Start playback
-curl -X POST http://127.0.0.1:8000/start-playback
-
-# Wait for playback to be active
-sleep 5
-
-# Process any pending episodes first
-curl -X POST http://127.0.0.1:8000/process-pending
-
-# Then run the agent for new episodes
-curl -X POST http://127.0.0.1:8000/run
+# Enable MCP debugging
+python main.py --mode api --mcp-debug
 ```
 
-### 2. Service Integration
+#### Tool Discovery Issues
+```bash
+# List available tools for a specific server
+curl http://127.0.0.1:8000/mcp/servers | jq '.servers[] | select(.name=="spotify") | .tools'
+```
 
-For users with smart home systems or automation tools:
+### Legacy Issues
 
-1. Set up a morning routine with your smart assistant (e.g., "Alexa, start my morning podcast")
-2. Have this routine start Spotify and trigger the podcast agent
-3. The agent will add new episodes to your queue
+#### Spotify Authentication
+If you encounter authentication issues:
+1. Ensure your Spotify Developer app has the correct redirect URI
+2. Check credentials in `.env` file
+3. Delete `.cache` files to force re-authentication
 
-### 3. Periodic Queue Processing
+#### No Active Device Error
+The system handles this gracefully with pending queues:
+```bash
+# Check device status
+curl http://127.0.0.1:8000/devices
 
-The simplest approach:
+# Process pending episodes when device is available
+curl -X POST http://127.0.0.1:8000/process-pending
+```
 
-1. Let the agent run on its own schedule (building up a queue of episodes)
-2. Whenever you open Spotify to listen to podcasts, manually process the queue:
-   ```bash
-   curl -X POST http://127.0.0.1:8000/process-pending
-   ```
-3. Or create a browser extension or menu bar app to do this with a single click
-
-## Advanced Features and Extensions
-
-### 1. Episode Summarization (Already Implemented)
-- The agent automatically generates summaries of episodes
-
-### 2. Queue Management System (New)
-- The agent stores episodes when no Spotify device is available
-- Episodes are queued for later processing
-- You can process the queue when a device becomes available
-
-### 3. Device Management and Playback Control
-- The agent can now start playback on Spotify devices
-- It can check for available devices and their status
-- This enables more automated workflows
-
-### 4. Custom Scheduling
-- Set up a system-level scheduler to work with the agent
-- Create multi-step routines that handle all aspects of podcast management
-- Integrate with smart home systems or automation tools
-
-### 5. Future Extensions
-- **Transcript Analysis**: Download and analyze episode transcripts
-- **Calendar Integration**: Connect to Google Calendar for scheduling episodes
-- **Listening History**: Track listened episodes to improve recommendations
-- **Mobile App**: Create a companion mobile app for easier control
-
-## License
-
-This project is licensed under the MIT License - see the LICENSE file for details.
+#### Mo
