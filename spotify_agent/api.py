@@ -119,6 +119,9 @@ def add_preference(preference: PreferenceCreate):
         agent.add_podcast_preference(pref)
         
         return {"status": "success", "message": "Preference added", "preference": pref.dict()}
+    except HTTPException:
+        # Re-raise HTTPExceptions as-is (don't convert them to 500)
+        raise
     except Exception as e:
         logger.error(f"Error adding preference: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
