@@ -61,7 +61,7 @@
   
   <rect x="720" y="245" width="300" height="60" rx="8" fill="rgba(255,255,255,0.9)" stroke="#3498db" stroke-width="2"/>
   <text x="730" y="265" font-family="Arial, sans-serif" font-size="14" font-weight="bold" fill="#2c3e50">Configuration Manager</text>
-  <text x="730" y="285" font-family="Arial, sans-serif" font-size="12" fill="#7f8c8d">Preferences & settings</text>
+  <text x="730" y="285" font-family="Arial, sans-serif" font-size="12" fill="#7f8c8d">Preferences &amp; settings</text>
   
   <!-- Arrow -->
   <polygon points="600,340 590,350 610,350" fill="#3498db"/>
