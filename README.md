@@ -432,4 +432,95 @@ curl http://127.0.0.1:8000/devices
 curl -X POST http://127.0.0.1:8000/process-pending
 ```
 
-#### Mo
+#### Module Import Errors
+If you see MCP-related import errors:
+1. Ensure you've installed all requirements: `pip install -r requirements.txt`
+2. Check Python version is 3.9+
+3. Verify virtual environment is activated
+
+## Development and Testing
+
+### Running Tests
+
+```bash
+# Run basic functionality tests
+python -m pytest tests/
+
+# Test MCP server communication
+python -m pytest tests/test_mcp_servers.py
+
+# Test with MCP debugging
+python -m pytest tests/ --mcp-debug
+```
+
+### MCP Server Testing
+
+```bash
+# Test individual MCP servers
+curl -X POST http://127.0.0.1:8000/mcp/call \
+  -H "Content-Type: application/json" \
+  -d '{"server_name": "spotify", "tool_name": "get_devices", "arguments": {}}'
+```
+
+## Migration from v1.x
+
+The MCP-based architecture is backward compatible. Existing API endpoints continue to work:
+
+### Automatic Migration
+- All existing API endpoints remain functional
+- Configuration files (.env) work without changes
+- Existing preferences and queues are preserved
+
+### Gradual Adoption
+- Start using new MCP endpoints alongside existing ones
+- Migrate custom integrations to use MCP servers over time
+- Take advantage of enhanced debugging and monitoring
+
+## Performance Considerations
+
+### MCP Benefits
+- **Async Architecture**: Better concurrency and resource utilization
+- **Modular Loading**: Only load required MCP servers
+- **Error Isolation**: Server failures don't crash the entire system
+- **Resource Management**: Better memory and connection management
+
+### Optimization Tips
+- Use MCP resource caching for frequently accessed data
+- Implement MCP server connection pooling for high-load scenarios
+- Monitor MCP server performance via the status endpoints
+
+## Contributing
+
+We welcome contributions! The MCP architecture makes it easier to contribute:
+
+### Adding New MCP Servers
+1. Create a new server in `mcp_server/`
+2. Implement the required MCP protocol methods
+3. Register tools and resources
+4. Add tests and documentation
+
+### Extending Existing Servers
+1. Add new tools to existing MCP servers
+2. Update input schemas and documentation
+3. Ensure backward compatibility
+
+## License
+
+This project is licensed under the MIT License - see the LICENSE file for details.
+
+## Changelog
+
+### v2.0.0 (MCP Release)
+- 🆕 **MCP Architecture**: Complete refactor using Model Context Protocol
+- 🆕 **Modular Design**: Separate MCP servers for different concerns
+- 🆕 **Enhanced API**: New MCP-specific endpoints
+- 🆕 **Better Debugging**: MCP protocol debugging support
+- 🆕 **Async-First**: Fully asynchronous architecture
+- ✅ **Backward Compatibility**: All v1.x features preserved
+
+### v1.0.0 (Original Release)
+- ✅ Basic podcast discovery and queueing
+- ✅ LLM-based episode evaluation
+- ✅ Spotify integration
+- ✅ RESTful API
+- ✅ Offline queue management

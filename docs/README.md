@@ -1,12 +1,13 @@
 # Spotify Podcast Agent Documentation
 
+# Documentation
+
 ## Architecture
-- [Interactive Architecture Diagram](./architecture.html) - Comprehensive MCP architecture visualization
-- [Static Architecture Diagram](./architecture-diagram.png) - PNG version for presentations
+- [Interactive Architecture Diagram](./architecture.html)
+- [SVG Architecture Diagram](./architecture-diagram.svg)
 
-## API Documentation
-- [API Reference](../README.md#api-usage) - Complete API endpoint documentation
-
-## Deployment
-- [Production Deployment](../README.md#deployment) - Production setup guides
+## Getting Started
+- [Main README](../README.md)
+- [API Documentation](../README.md#api-usage)
+- [Deployment Guide](../README.md#deployment)
 
