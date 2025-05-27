@@ -33,8 +33,22 @@ app.add_middleware(
 
 # Initialize MCP agent
 try:
-    config = AgentConfig()
-    agent = MCPPodcastAgent(config)
+    agent = None
+    config = None
+
+    def get_agent():
+        """Get or create the MCP agent instance"""
+        global agent, config
+        if agent is None:
+            from spotify_agent.mcp_agent.podcast_agent import MCPPodcastAgent
+            try:
+                config = AgentConfig()
+                agent = MCPPodcastAgent(config)
+                logger.info("MCP Agent initialized successfully")
+            except Exception as e:
+                logger.error(f"Failed to initialize MCP agent: {str(e)}")
+                raise HTTPException(status_code=500, detail=f"Failed to initialize MCP agent: {str(e)}")
+        return agent
     logger.info("MCP Agent initialized successfully")
 except Exception as e:
     logger.error(f"Failed to initialize MCP agent: {str(e)}")
