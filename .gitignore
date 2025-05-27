@@ -57,3 +57,5 @@ Thumbs.db
 # Backup files
 *~
 *.bak
+# Spotify authentication cache
+.spotify_cache

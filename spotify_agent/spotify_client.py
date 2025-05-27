@@ -10,14 +10,17 @@ class SpotifyClient:
     
     def __init__(self, client_id: str, client_secret: str, redirect_uri: str):
         """Initialize Spotify client with authentication details"""
-        self.scope = "user-read-playback-state user-modify-playback-state user-library-read user-read-recently-played playlist-read-private"
+        self.scope = "user-read-playback-state user-modify-playback-state user-read-currently-playing user-library-read user-read-recently-played playlist-read-private streaming"
         
         try:
             self.sp = spotipy.Spotify(auth_manager=SpotifyOAuth(
                 client_id=client_id,
                 client_secret=client_secret,
                 redirect_uri=redirect_uri,
-                scope=self.scope
+                scope=self.scope,
+                open_browser=False,
+                show_dialog=False,
+                cache_path=".spotify_cache"
             ))
             logger.info("Spotify client initialized successfully")
         except Exception as e:
