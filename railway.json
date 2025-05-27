@@ -1,7 +1,8 @@
 {
   "$schema": "https://railway.app/railway.schema.json",
   "deploy": {
-    "startCommand": "python main.py --mode api",
-    "healthcheckPath": "/debug/env"
+    "startCommand": "python start_app.py",
+    "healthcheckPath": "/",
+    "healthcheckTimeout": 120
   }
 }
