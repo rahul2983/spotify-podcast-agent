@@ -11,8 +11,15 @@ import logging
 import asyncio
 import os
 from datetime import datetime
-
 from ..config import AgentConfig, PodcastPreference
+import threading
+import schedule
+import time
+from datetime import datetime
+
+# Global scheduler thread
+scheduler_thread = None
+scheduler_running = False
 
 logger = logging.getLogger(__name__)
 
@@ -65,6 +72,54 @@ def get_agent():
             raise HTTPException(status_code=500, detail=f"Failed to initialize MCP agent: {str(e)}")
     
     return agent
+
+def run_scheduled_agent_job():
+    """Background job for scheduled agent runs"""
+    try:
+        logger.info("🕒 Running scheduled agent job...")
+        current_agent = get_agent()
+        
+        # Run agent in background (async)
+        import asyncio
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        
+        try:
+            result = loop.run_until_complete(current_agent.run())
+            logger.info(f"📊 Scheduled run result: {result['message']}")
+            
+            # Also process pending episodes
+            pending_result = loop.run_until_complete(current_agent.process_pending_episodes())
+            if pending_result.get('episodes'):
+                logger.info(f"✅ Processed {len(pending_result['episodes'])} pending episodes")
+        finally:
+            loop.close()
+            
+    except Exception as e:
+        logger.error(f"💥 Error in scheduled job: {str(e)}")
+
+def start_scheduler_thread():
+    """Start the scheduler in a background thread"""
+    global scheduler_running
+    
+    try:
+        current_config = get_agent().config
+        
+        if current_config.check_frequency == "daily":
+            schedule.every().day.at("08:00").do(run_scheduled_agent_job)
+            logger.info("📅 Scheduler set to run daily at 08:00")
+        elif current_config.check_frequency == "weekly":
+            schedule.every().monday.at("08:00").do(run_scheduled_agent_job)
+            logger.info("📅 Scheduler set to run weekly on Monday at 08:00")
+        
+        scheduler_running = True
+        
+        while scheduler_running:
+            schedule.run_pending()
+            time.sleep(60)  # Check every minute
+            
+    except Exception as e:
+        logger.error(f"💥 Error in scheduler thread: {str(e)}")
 
 # API Models
 class PreferenceCreate(BaseModel):
@@ -264,6 +319,67 @@ def update_config(config_update: AgentConfigUpdate):
     except Exception as e:
         logger.error(f"Error updating configuration: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
+    
+@app.post("/scheduler/start")
+def start_scheduler():
+    """Start the built-in scheduler"""
+    global scheduler_thread, scheduler_running
+    
+    if scheduler_thread and scheduler_thread.is_alive():
+        return {
+            "status": "already_running",
+            "message": "Scheduler is already running",
+            "next_run": "Varies based on configuration"
+        }
+    
+    try:
+        scheduler_running = True
+        scheduler_thread = threading.Thread(target=start_scheduler_thread, daemon=True)
+        scheduler_thread.start()
+        
+        current_config = get_agent().config
+        
+        return {
+            "status": "started",
+            "message": "Scheduler started successfully",
+            "frequency": current_config.check_frequency,
+            "next_run": "Daily at 08:00" if current_config.check_frequency == "daily" else "Monday at 08:00"
+        }
+    except Exception as e:
+        logger.error(f"Error starting scheduler: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/scheduler/stop")
+def stop_scheduler():
+    """Stop the built-in scheduler"""
+    global scheduler_running
+    
+    scheduler_running = False
+    schedule.clear()
+    
+    return {
+        "status": "stopped",
+        "message": "Scheduler stopped successfully"
+    }
+
+@app.get("/scheduler/status")
+def get_scheduler_status():
+    """Get scheduler status"""
+    global scheduler_thread, scheduler_running
+    
+    is_running = scheduler_thread and scheduler_thread.is_alive() and scheduler_running
+    next_run = None
+    
+    if is_running and schedule.jobs:
+        next_job = schedule.next_run()
+        next_run = next_job.isoformat() if next_job else None
+    
+    return {
+        "running": is_running,
+        "next_run": next_run,
+        "jobs_count": len(schedule.jobs),
+        "frequency": get_agent().config.check_frequency if is_running else None
+    }
 
 # ===== EXISTING ENDPOINTS =====
 @app.get("/debug/env")

@@ -11,12 +11,12 @@ An advanced agentic AI system that automatically discovers, evaluates, and queue
 - **Better Error Handling**: Graceful degradation and comprehensive logging
 - **Future-Proof**: Based on emerging industry standards
 
-### **New Features**
-- **MCP Server Introspection**: Discover available tools and resources
-- **Direct MCP Tool Calling**: Call individual server functions via API
-- **Enhanced Status Reporting**: Comprehensive system health monitoring
-- **Async-First Design**: Fully asynchronous architecture for better performance
-- **Improved Debugging**: MCP protocol provides structured logging and debugging
+### **Production Features**
+- **🔐 OAuth Authentication**: Full Spotify user authentication flow
+- **⚙️ Configuration Management**: Dynamic agent settings via API
+- **🕒 Automated Scheduling**: Daily/weekly runs via Heroku Scheduler
+- **🎯 Background Processing**: Non-blocking agent runs
+- **📊 Comprehensive Monitoring**: Detailed status and health endpoints
 
 ## Features
 
@@ -38,7 +38,15 @@ An advanced agentic AI system that automatically discovers, evaluates, and queue
 - 🆕 **Better Monitoring**: Comprehensive status reporting across all components
 - 🆕 **Debugging Support**: MCP protocol debugging and introspection
 
-## Architecture Overview
+### Production-Ready Features
+- 🆕 **OAuth Authentication**: Secure Spotify user authorization
+- 🆕 **Configuration API**: Dynamic settings management
+- 🆕 **Automated Scheduling**: Set-and-forget daily/weekly runs
+- 🆕 **Background Processing**: Handles long-running tasks without timeouts
+- 🆕 **Pending Queue**: Handles offline scenarios gracefully
+- 🆕 **Health Monitoring**: Comprehensive status and debugging endpoints
+
+## 🏗️ Architecture Overview
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
@@ -60,6 +68,7 @@ An advanced agentic AI system that automatically discovers, evaluates, and queue
 │  │  │ • Episodes   │ │ • Summarize  │ │ • Get Pending    │  │  │
 │  │  │ • Queue      │ │ • Reason     │ │ • Remove Proc.   │  │  │
 │  │  │ • Devices    │ │              │ │                  │  │  │
+│  │  │ • Auth       │ │              │ │                  │  │  │
 │  │  └──────────────┘ └──────────────┘ └──────────────────┘  │  │
 │  └─────────────────────────────────────────────────────────┘  │
 ├─────────────────────────────────────────────────────────────────┤
@@ -67,460 +76,375 @@ An advanced agentic AI system that automatically discovers, evaluates, and queue
 └─────────────────────────────────────────────────────────────────┘
 ```
 
-## 📋 Documentation
-
-### Architecture
-- **[Interactive Architecture Diagram](./docs/architecture.html)** - Comprehensive MCP architecture visualization
-- **[Documentation Hub](./docs/)** - Complete technical documentation
-
-### Quick Links
-- [API Usage](#api-usage) - REST API examples
-- [Production Deployment](#deployment) - Deployment guides
-- [MCP Protocol](#mcp-specific-endpoints) - Model Context Protocol usage
-
-## Setup Instructions
+## 🚀 Quick Start (Heroku Deployment)
 
 ### Prerequisites
 
-- Python 3.9+ installed
+- Heroku account
 - Spotify Premium account
 - OpenAI API key
 - Spotify Developer app credentials
 
-### Step 1: Clone the Repository
+### 1. Deploy to Heroku
+
+[![Deploy](https://www.herokucdn.com/deploy/button.svg)](https://heroku.com/deploy?template=https://github.com/yourusername/spotify-podcast-agent)
+
+Or manually:
 
 ```bash
+# Clone and deploy
 git clone https://github.com/yourusername/spotify-podcast-agent.git
 cd spotify-podcast-agent
+
+# Create Heroku app
+heroku create your-app-name
+
+# Set environment variables
+heroku config:set OPENAI_API_KEY=your_openai_api_key
+heroku config:set SPOTIFY_CLIENT_ID=your_spotify_client_id
+heroku config:set SPOTIFY_CLIENT_SECRET=your_spotify_client_secret
+heroku config:set SPOTIFY_REDIRECT_URI=https://your-app-name.herokuapp.com/callback
+
+# Deploy
+git push heroku main
 ```
 
-### Step 2: Install Dependencies
+### 2. Configure Spotify Developer App
+
+1. Go to [Spotify Developer Dashboard](https://developer.spotify.com/dashboard/)
+2. Create or edit your app
+3. Add redirect URI: `https://your-app-name.herokuapp.com/callback`
+4. Save settings
+
+### 3. Authenticate with Spotify
 
 ```bash
-# Create and activate a virtual environment
-python -m venv podcast-agent-env
-source podcast-agent-env/bin/activate  # On Windows: podcast-agent-env\Scripts\activate
+# Check authentication status
+curl https://your-app-name.herokuapp.com/auth/status
 
-# Install the required packages
-pip install -r requirements.txt
+# If not authenticated, get auth URL
+curl https://your-app-name.herokuapp.com/auth
+
+# Visit the returned URL to authenticate
+# Then verify authentication worked
+curl https://your-app-name.herokuapp.com/auth/status
 ```
 
-All required packages will be installed, including:
-- **Core**: langchain, openai, spotipy, pydantic, python-dotenv, fastapi, uvicorn
-- **MCP**: asyncio-mqtt, websockets, jsonrpc-base, typing-extensions
-
-### Step 3: Set Up Spotify Developer App
-
-1. Go to the [Spotify Developer Dashboard](https://developer.spotify.com/dashboard/)
-2. Log in with your Spotify account
-3. Click "Create an App"
-4. Fill in the app name and description
-5. Add `http://127.0.0.1:8000/callback` as a Redirect URI
-6. Save your Client ID and Client Secret
-
-### Step 4: Configure Environment Variables
-
-Create a `.env` file in the project root:
-
-```env
-OPENAI_API_KEY=your_openai_api_key
-SPOTIFY_CLIENT_ID=your_spotify_client_id
-SPOTIFY_CLIENT_SECRET=your_spotify_client_secret
-SPOTIFY_REDIRECT_URI=http://127.0.0.1:8000/callback
-```
-
-## Running the Agent
-
-### API Mode (Recommended)
-
-Start the MCP-enabled web API:
+### 4. Configure Preferences
 
 ```bash
-# Standard mode
-python main.py --mode api
+# Add a specific podcast
+curl -X POST https://your-app-name.herokuapp.com/preferences \
+  -H "Content-Type: application/json" \
+  -d '{"show_name": "The Tim Ferriss Show", "min_duration_minutes": 30}'
 
-# With MCP debugging enabled
-python main.py --mode api --mcp-debug
+# Add topic-based preferences
+curl -X POST https://your-app-name.herokuapp.com/preferences \
+  -H "Content-Type: application/json" \
+  -d '{"topics": ["technology", "artificial intelligence"], "min_duration_minutes": 15}'
 ```
 
-The API will be available at `http://127.0.0.1:8000`
-
-### CLI Mode
-
-For quick tests or one-off runs:
+### 5. Test the Agent
 
 ```bash
-python main.py --mode cli
+# Run the agent manually
+curl -X POST https://your-app-name.herokuapp.com/run
+
+# Check status
+curl https://your-app-name.herokuapp.com/status
+
+# Process any pending episodes
+curl -X POST https://your-app-name.herokuapp.com/process-pending
 ```
 
-### First Run Authentication
+## 📋 API Documentation
 
-The first time you run the application:
+### Authentication Endpoints
 
-1. A browser window will open asking you to log in to Spotify
-2. After logging in, authorize the app with the requested permissions
-3. The app will capture the authorization code and proceed
-4. Subsequent runs will use cached credentials
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/auth` | GET | Get Spotify authorization URL |
+| `/auth/status` | GET | Check authentication status |
+| `/callback` | GET | OAuth callback (automatic) |
 
-## API Usage
+### Core Endpoints
 
-### Core Podcast Management
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/` | GET | API information and health check |
+| `/status` | GET | Comprehensive agent status |
+| `/preferences` | GET | Get all podcast preferences |
+| `/preferences` | POST | Add new podcast preference |
+| `/run` | POST | Run agent (background processing) |
+| `/devices` | GET | Get available Spotify devices |
+| `/process-pending` | POST | Process pending episodes |
 
-```bash
-# Test server connectivity
-curl http://127.0.0.1:8000/
+### Configuration Management
 
-# Get current preferences (empty initially)
-curl http://127.0.0.1:8000/preferences
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/config` | GET | Get current agent configuration |
+| `/config` | PUT | Update agent configuration |
 
-# Add specific podcast show with duration constraints
-curl -X POST http://127.0.0.1:8000/preferences -H "Content-Type: application/json" -d '{"show_name": "The Tim Ferriss Show", "min_duration_minutes": 30, "max_duration_minutes": 120}'
-
-# Add preference by topics with minimum duration
-curl -X POST http://127.0.0.1:8000/preferences -H "Content-Type: application/json" -d '{"topics": ["artificial intelligence", "technology", "startup"], "min_duration_minutes": 15}'
-
-# Add preference for specific show ID (more reliable than name)
-curl -X POST http://127.0.0.1:8000/preferences -H "Content-Type: application/json" -d '{"show_id": "4rOoJ6Egrf8K2IrywzwOMk", "min_duration_minutes": 10}'
-
-# Add tech news preference with short duration
-curl -X POST http://127.0.0.1:8000/preferences -H "Content-Type: application/json" -d '{"show_name": "Daily Tech Headlines", "min_duration_minutes": 5, "max_duration_minutes": 30}'
-
-# Add business/entrepreneurship topics
-curl -X POST http://127.0.0.1:8000/preferences -H "Content-Type: application/json" -d '{"topics": ["business", "entrepreneurship", "investing"], "min_duration_minutes": 20, "max_duration_minutes": 60}'
-
-# View all configured preferences
-curl http://127.0.0.1:8000/preferences
-
-# Run the agent to discover and queue episodes
-curl -X POST http://127.0.0.1:8000/run
-
-# Get comprehensive system status
-curl http://127.0.0.1:8000/status
-```
-
-### MCP-Specific Endpoints
-
-#### Discover MCP Servers and Capabilities
-
-```bash
-# List all MCP servers and their tools/resources
-curl http://127.0.0.1:8000/mcp/servers
-```
-
-Example response:
+**Configuration Options:**
 ```json
 {
-  "servers": [
-    {
-      "name": "spotify",
-      "tools": [
-        {
-          "name": "search_podcasts",
-          "description": "Search for podcasts by query",
-          "input_schema": {...}
-        },
-        {
-          "name": "get_show_episodes",
-          "description": "Get episodes for a specific show",
-          "input_schema": {...}
-        }
-      ],
-      "resources": [
-        {
-          "uri": "spotify://user/profile",
-          "name": "User Profile",
-          "description": "Current user's Spotify profile"
-        }
-      ]
-    }
-  ]
+  "relevance_threshold": 0.7,    // 0.0-1.0, how relevant episodes must be
+  "max_episodes_per_run": 5,     // Maximum episodes to process per run
+  "check_frequency": "daily",    // "daily" or "weekly"
+  "use_vector_memory": false     // Enable vector storage (advanced)
 }
 ```
 
-#### Call MCP Tools Directly
+### MCP Protocol Endpoints
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/mcp/servers` | GET | List all MCP servers and capabilities |
+| `/mcp/call` | POST | Call a tool on a specific MCP server |
+| `/mcp/resources/{server}` | GET | Read resources from MCP server |
+
+### Scheduling Endpoints
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/scheduler/start` | POST | Start automated scheduling |
+| `/scheduler/stop` | POST | Stop automated scheduling |
+| `/scheduler/status` | GET | Get scheduler status |
+
+## 🕒 Automated Scheduling Setup
+
+### Option 1: Heroku Scheduler (Recommended)
 
 ```bash
-# Search for podcasts via Spotify MCP server
-curl -X POST http://127.0.0.1:8000/mcp/call -H "Content-Type: application/json" -d '{"server_name": "spotify", "tool_name": "search_podcasts", "arguments": {"query": "artificial intelligence", "limit": 3}}'
+# Add Heroku Scheduler add-on
+heroku addons:create scheduler:standard
 
-# Get episodes for a specific show
-curl -X POST http://127.0.0.1:8000/mcp/call -H "Content-Type: application/json" -d '{"server_name": "spotify", "tool_name": "get_show_episodes", "arguments": {"show_id": "4rOoJ6Egrf8K2IrywzwOMk", "limit": 5}}'
+# Open scheduler dashboard
+heroku addons:open scheduler
 
-# Get available Spotify devices
-curl -X POST http://127.0.0.1:8000/mcp/call -H "Content-Type: application/json" -d '{"server_name": "spotify", "tool_name": "get_devices", "arguments": {}}'
-
-# Add episode to queue via MCP
-curl -X POST http://127.0.0.1:8000/mcp/call -H "Content-Type: application/json" -d '{"server_name": "spotify", "tool_name": "add_to_queue", "arguments": {"episode_uri": "spotify:episode:4TnieuwqFfVL0YlKKzPacJ"}}'
-
-# Evaluate episode via LLM MCP server (example with mock data)
-curl -X POST http://127.0.0.1:8000/mcp/call -H "Content-Type: application/json" -d '{"server_name": "llm", "tool_name": "evaluate_episode", "arguments": {"episode": {"name": "AI Future", "description": "Discussion about AI"}, "preferences": [{"topics": ["artificial intelligence"]}]}}'
-
-# Generate episode summary via LLM MCP server
-curl -X POST http://127.0.0.1:8000/mcp/call -H "Content-Type: application/json" -d '{"server_name": "llm", "tool_name": "generate_summary", "arguments": {"episode": {"name": "Tech Trends 2025", "description": "Latest technology trends"}}}'
-
-# Get pending episodes via Queue MCP server
-curl -X POST http://127.0.0.1:8000/mcp/call -H "Content-Type: application/json" -d '{"server_name": "queue", "tool_name": "get_pending", "arguments": {}}'
-
-# Add episodes to pending queue
-curl -X POST http://127.0.0.1:8000/mcp/call -H "Content-Type: application/json" -d '{"server_name": "queue", "tool_name": "add_pending", "arguments": {"episodes": [{"episode": {"id": "123", "name": "Test Episode"}}]}}'
+# Add job in dashboard:
+# Command: python scheduler_job.py
+# Frequency: Daily at 8:00 AM
 ```
 
-#### Access MCP Resources
+### Option 2: Built-in Scheduler API
 
 ```bash
-# Get user profile from Spotify MCP server
-curl "http://127.0.0.1:8000/mcp/resources/spotify?uri=spotify://user/profile"
+# Start automated scheduling
+curl -X POST https://your-app-name.herokuapp.com/scheduler/start
 
-# Get available Spotify devices
-curl "http://127.0.0.1:8000/mcp/resources/spotify?uri=spotify://devices"
+# Check scheduler status
+curl https://your-app-name.herokuapp.com/scheduler/status
 
-# Get recently played tracks and episodes
-curl "http://127.0.0.1:8000/mcp/resources/spotify?uri=spotify://user/recently_played"
-
-# Get pending episodes queue
-curl "http://127.0.0.1:8000/mcp/resources/queue?uri=queue://pending"
+# Stop scheduler
+curl -X POST https://your-app-name.herokuapp.com/scheduler/stop
 ```
 
-### Queue Management
+## 🔧 Configuration Examples
+
+### Basic Setup
 
 ```bash
-# Process pending episodes (when device becomes available)
-curl -X POST http://127.0.0.1:8000/process-pending
-
-# Get available Spotify devices
-curl http://127.0.0.1:8000/devices
-
-# Start playback on default device
-curl -X POST http://127.0.0.1:8000/start-playback
-
-# Reset processed episodes list
-curl -X POST http://127.0.0.1:8000/reset-episodes
+# Set conservative settings
+curl -X PUT https://your-app-name.herokuapp.com/config \
+  -H "Content-Type: application/json" \
+  -d '{"relevance_threshold": 0.7, "max_episodes_per_run": 3}'
 ```
 
-## Project Structure
-
-```
-spotify-podcast-agent/
-├── spotify_agent/
-│   ├── __init__.py
-│   ├── config.py                    # Configuration models
-│   ├── spotify_client.py            # Spotify API client
-│   ├── llm_agent.py                 # LLM-based evaluation
-│   ├── queue_manager.py             # Queue management
-│   │
-│   ├── mcp_server/                  # MCP Protocol Implementation
-│   │   ├── __init__.py
-│   │   ├── protocol.py              # Core MCP protocol classes
-│   │   ├── spotify_server.py        # Spotify MCP server
-│   │   ├── llm_server.py            # LLM MCP server
-│   │   └── queue_server.py          # Queue MCP server
-│   │
-│   ├── mcp_agent/                   # MCP-based Agent
-│   │   ├── __init__.py
-│   │   └── podcast_agent.py         # Main MCP agent orchestration
-│   │
-│   ├── mcp_api/                     # MCP-enabled API
-│   │   ├── __init__.py
-│   │   └── api.py                   # FastAPI with MCP endpoints
-│   │
-│   └── agent.py                     # Legacy agent (backward compatibility)
-│
-├── main.py                          # Entry point with MCP support
-├── requirements.txt                 # Dependencies (including MCP)
-├── setup.py                         # Package setup
-├── .env                             # Environment variables
-└── README.md                        # This file
-```
-
-## Advanced Usage
-
-### MCP Server Development
-
-You can extend the system by creating new MCP servers:
-
-```python
-from spotify_agent.mcp_server.protocol import MCPServer, MCPTool
-
-class CalendarMCPServer(MCPServer):
-    def __init__(self, calendar_client):
-        super().__init__("calendar", "1.0.0")
-        self.calendar = calendar_client
-        self._register_tools()
-    
-    def _register_tools(self):
-        self.tools.update({
-            "schedule_listening_time": MCPTool(
-                name="schedule_listening_time",
-                description="Schedule podcast listening time",
-                input_schema={
-                    "type": "object",
-                    "properties": {
-                        "datetime": {"type": "string"},
-                        "duration_minutes": {"type": "integer"}
-                    }
-                }
-            )
-        })
-    
-    async def _execute_tool(self, name: str, arguments: dict):
-        if name == "schedule_listening_time":
-            # Implementation here
-            pass
-```
-
-### Custom MCP Tool Chains
-
-Create complex workflows by chaining MCP tools:
-
-```python
-async def discover_and_schedule_podcasts(agent):
-    # 1. Search for podcasts
-    podcasts = await agent.mcp_client.send_request(
-        "spotify", "tools/call",
-        {"name": "search_podcasts", "arguments": {"query": "tech news"}}
-    )
-    
-    # 2. Evaluate episodes
-    for podcast in podcasts:
-        evaluation = await agent.mcp_client.send_request(
-            "llm", "tools/call",
-            {"name": "evaluate_episode", "arguments": {"episode": podcast}}
-        )
-        
-        # 3. Schedule if relevant
-        if evaluation["relevance_score"] > 0.8:
-            await agent.mcp_client.send_request(
-                "calendar", "tools/call",
-                {"name": "schedule_listening_time", "arguments": {...}}
-            )
-```
-
-## Troubleshooting
-
-### MCP-Specific Issues
-
-#### MCP Server Communication Errors
-```bash
-# Check MCP server status
-curl http://127.0.0.1:8000/mcp/servers
-
-# Enable MCP debugging
-python main.py --mode api --mcp-debug
-```
-
-#### Tool Discovery Issues
-```bash
-# List available tools for a specific server
-curl http://127.0.0.1:8000/mcp/servers | jq '.servers[] | select(.name=="spotify") | .tools'
-```
-
-### Legacy Issues
-
-#### Spotify Authentication
-If you encounter authentication issues:
-1. Ensure your Spotify Developer app has the correct redirect URI
-2. Check credentials in `.env` file
-3. Delete `.cache` files to force re-authentication
-
-#### No Active Device Error
-The system handles this gracefully with pending queues:
-```bash
-# Check device status
-curl http://127.0.0.1:8000/devices
-
-# Process pending episodes when device is available
-curl -X POST http://127.0.0.1:8000/process-pending
-```
-
-#### Module Import Errors
-If you see MCP-related import errors:
-1. Ensure you've installed all requirements: `pip install -r requirements.txt`
-2. Check Python version is 3.9+
-3. Verify virtual environment is activated
-
-## Development and Testing
-
-### Running Tests
+### Aggressive Discovery
 
 ```bash
-# Run basic functionality tests
-python -m pytest tests/
+# Get more episodes with lower threshold
+curl -X PUT https://your-app-name.herokuapp.com/config \
+  -H "Content-Type: application/json" \
+  -d '{"relevance_threshold": 0.5, "max_episodes_per_run": 10}'
+```
 
-# Test MCP server communication
-python -m pytest tests/test_mcp_servers.py
+### Add Diverse Preferences
 
-# Test with MCP debugging
-python -m pytest tests/ --mcp-debug
+```bash
+# Tech news (short episodes)
+curl -X POST https://your-app-name.herokuapp.com/preferences \
+  -H "Content-Type: application/json" \
+  -d '{"topics": ["technology", "startup"], "min_duration_minutes": 10, "max_duration_minutes": 30}'
+
+# Business interviews (longer episodes)  
+curl -X POST https://your-app-name.herokuapp.com/preferences \
+  -H "Content-Type: application/json" \
+  -d '{"topics": ["business", "entrepreneurship"], "min_duration_minutes": 45, "max_duration_minutes": 120}'
+
+# Specific high-quality shows
+curl -X POST https://your-app-name.herokuapp.com/preferences \
+  -H "Content-Type: application/json" \
+  -d '{"show_name": "Lex Fridman Podcast", "min_duration_minutes": 60}'
+```
+
+## 🔍 Monitoring and Debugging
+
+### Health Checks
+
+```bash
+# Comprehensive status
+curl https://your-app-name.herokuapp.com/status
+
+# Authentication status
+curl https://your-app-name.herokuapp.com/auth/status
+
+# Current configuration
+curl https://your-app-name.herokuapp.com/config
+
+# Environment variables (debug)
+curl https://your-app-name.herokuapp.com/debug/env
+```
+
+### Logs
+
+```bash
+# Real-time logs
+heroku logs --tail
+
+# Filter for agent activity
+heroku logs --tail | grep -i "episode\|found\|added\|relevance"
+
+# Search recent logs
+heroku logs --num 100 | grep "Background agent"
 ```
 
 ### MCP Server Testing
 
 ```bash
-# Test individual MCP servers
-curl -X POST http://127.0.0.1:8000/mcp/call \
+# Test Spotify integration
+curl -X POST https://your-app-name.herokuapp.com/mcp/call \
   -H "Content-Type: application/json" \
-  -d '{"server_name": "spotify", "tool_name": "get_devices", "arguments": {}}'
+  -d '{"server_name": "spotify", "tool_name": "search_podcasts", "arguments": {"query": "technology", "limit": 3}}'
+
+# Test LLM evaluation
+curl -X POST https://your-app-name.herokuapp.com/mcp/call \
+  -H "Content-Type: application/json" \
+  -d '{"server_name": "llm", "tool_name": "evaluate_episode", "arguments": {"episode": {"name": "AI Episode", "description": "About AI"}, "preferences": [{"topics": ["AI"]}]}}'
 ```
 
-## Migration from v1.x
+## 🚨 Troubleshooting
 
-The MCP-based architecture is backward compatible. Existing API endpoints continue to work:
+### Common Issues
 
-### Automatic Migration
-- All existing API endpoints remain functional
-- Configuration files (.env) work without changes
-- Existing preferences and queues are preserved
+**No episodes found:**
+- Check if preferences are configured: `/preferences`
+- Lower relevance threshold: `/config` 
+- Verify Spotify authentication: `/auth/status`
 
-### Gradual Adoption
-- Start using new MCP endpoints alongside existing ones
-- Migrate custom integrations to use MCP servers over time
-- Take advantage of enhanced debugging and monitoring
+**Episodes not in queue:**
+- Check for pending episodes: `/status`
+- Process pending: `/process-pending`
+- Ensure Spotify is active (play something briefly)
 
-## Performance Considerations
+**Authentication errors:**
+- Verify redirect URI in Spotify Developer Dashboard
+- Check environment variables: `/debug/env`
+- Re-authenticate: `/auth`
 
-### MCP Benefits
-- **Async Architecture**: Better concurrency and resource utilization
-- **Modular Loading**: Only load required MCP servers
-- **Error Isolation**: Server failures don't crash the entire system
-- **Resource Management**: Better memory and connection management
+**Timeouts:**
+- Agent runs in background automatically
+- Check logs for completion: `heroku logs --tail`
+- Use `/status` to check progress
 
-### Optimization Tips
-- Use MCP resource caching for frequently accessed data
-- Implement MCP server connection pooling for high-load scenarios
-- Monitor MCP server performance via the status endpoints
+### Error Codes
 
-## Contributing
+- **H10 (App crashed)**: Check logs for startup errors
+- **H12 (Request timeout)**: Normal for `/run` - uses background processing
+- **500 errors**: Check environment variables and authentication
 
-We welcome contributions! The MCP architecture makes it easier to contribute:
+## 🔐 Security Notes
 
-### Adding New MCP Servers
-1. Create a new server in `mcp_server/`
-2. Implement the required MCP protocol methods
-3. Register tools and resources
-4. Add tests and documentation
+- **Environment Variables**: Never commit API keys to git
+- **OAuth Tokens**: Cached securely on Heroku filesystem
+- **Rate Limiting**: Built-in Spotify API rate limit handling
+- **CORS**: Configured for web access (adjust for production)
 
-### Extending Existing Servers
-1. Add new tools to existing MCP servers
-2. Update input schemas and documentation
-3. Ensure backward compatibility
+## 📈 Performance Tips
 
-## License
+- **Relevance Threshold**: Start with 0.7, adjust based on results
+- **Episode Limits**: 3-5 episodes per run for daily use
+- **Scheduling**: Daily runs work well for active listeners
+- **Preferences**: 2-5 preferences provide good variety
 
-This project is licensed under the MIT License - see the LICENSE file for details.
+## 🔧 Development Setup (Local)
 
-## Changelog
+```bash
+# Clone repository
+git clone https://github.com/yourusername/spotify-podcast-agent.git
+cd spotify-podcast-agent
 
-### v2.0.0 (MCP Release)
-- 🆕 **MCP Architecture**: Complete refactor using Model Context Protocol
-- 🆕 **Modular Design**: Separate MCP servers for different concerns
-- 🆕 **Enhanced API**: New MCP-specific endpoints
-- 🆕 **Better Debugging**: MCP protocol debugging support
-- 🆕 **Async-First**: Fully asynchronous architecture
-- ✅ **Backward Compatibility**: All v1.x features preserved
+# Create virtual environment
+python -m venv podcast-agent-env
+source podcast-agent-env/bin/activate  # Windows: podcast-agent-env\Scripts\activate
 
-### v1.0.0 (Original Release)
-- ✅ Basic podcast discovery and queueing
-- ✅ LLM-based episode evaluation
-- ✅ Spotify integration
-- ✅ RESTful API
-- ✅ Offline queue management
+# Install dependencies
+pip install -r requirements.txt
+
+# Create .env file
+cp .env.example .env
+# Edit .env with your API keys
+
+# Run locally
+python main.py --mode api
+```
+
+## 📚 Advanced Features
+
+### Custom MCP Servers
+
+Create custom servers for extended functionality:
+
+```python
+from spotify_agent.mcp_server.protocol import MCPServer
+
+class CalendarMCPServer(MCPServer):
+    def __init__(self):
+        super().__init__("calendar", "1.0.0")
+        # Implementation...
+```
+
+### Webhook Integration
+
+Set up webhooks for external triggers:
+
+```python
+@app.post("/webhook/spotify")
+def spotify_webhook(data: dict):
+    # Trigger agent on specific Spotify events
+    pass
+```
+
+## 🤝 Contributing
+
+1. Fork the repository
+2. Create a feature branch
+3. Make changes following MCP patterns
+4. Add tests for new functionality
+5. Update documentation
+6. Submit pull request
+
+## 📄 License
+
+MIT License - see LICENSE file for details.
+
+## 🆘 Support
+
+- **GitHub Issues**: For bugs and feature requests
+- **Documentation**: Complete API reference in `/docs`
+- **Heroku Logs**: Use `heroku logs --tail` for debugging
+
+## 🎯 Roadmap
+
+- [ ] Calendar integration for scheduled listening
+- [ ] Email notifications for new episodes
+- [ ] Advanced AI filtering with custom models
+- [ ] Multi-user support
+- [ ] Mobile app integration
+- [ ] Podcast analytics and insights
+
+---
+
+**Built with ❤️ using MCP, FastAPI, OpenAI, and Spotify APIs**
