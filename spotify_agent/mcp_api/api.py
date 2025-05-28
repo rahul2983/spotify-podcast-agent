@@ -4,10 +4,12 @@ MCP-enabled FastAPI server for Spotify Podcast Agent
 import uvicorn
 from fastapi import FastAPI, HTTPException, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import RedirectResponse
 from pydantic import BaseModel
 from typing import List, Dict, Any, Optional
 import logging
 import asyncio
+import os
 from datetime import datetime
 
 from ..config import AgentConfig, PodcastPreference
@@ -72,130 +74,143 @@ class PreferenceCreate(BaseModel):
     min_duration_minutes: Optional[int] = None
     max_duration_minutes: Optional[int] = None
 
-class AgentConfigUpdate(BaseModel):
-    check_frequency: Optional[str] = None
-    relevance_threshold: Optional[float] = None
-    max_episodes_per_run: Optional[int] = None
-    use_vector_memory: Optional[bool] = None
-
-class MCPServerInfo(BaseModel):
-    name: str
-    version: str
-    tools: List[Dict[str, Any]]
-    resources: List[Dict[str, Any]]
-
 # API Routes
 @app.get("/")
 def read_root():
-    return {"status": "online", "message": "MCP Spotify Podcast Agent API is running", "version": "2.0.0"}
+    return {
+        "status": "online", 
+        "message": "MCP Spotify Podcast Agent API is running", 
+        "version": "2.0.0",
+        "endpoints": {
+            "auth": "/auth - Get Spotify authorization URL",
+            "auth_status": "/auth/status - Check authentication status",
+            "callback": "/callback - OAuth callback endpoint",
+            "status": "/status - Get app status",
+            "preferences": "/preferences - Manage podcast preferences",
+            "devices": "/devices - Get Spotify devices",
+            "run": "/run - Run the podcast agent"
+        }
+    }
 
+# ===== AUTHENTICATION ENDPOINTS =====
+@app.get("/auth")
+def initiate_auth():
+    """Initiate Spotify OAuth flow"""
+    try:
+        current_agent = get_agent()
+        
+        # Get the Spotify client from the agent
+        spotify_client = current_agent.spotify_client
+        
+        # Get the authorization URL
+        auth_url = spotify_client.sp.auth_manager.get_authorize_url()
+        
+        return {
+            "auth_url": auth_url,
+            "message": "Visit this URL to authorize the app with your Spotify account",
+            "instructions": [
+                "1. Click or visit the auth_url",
+                "2. Log in to your Spotify account",
+                "3. Click 'Agree' to authorize the app",
+                "4. You'll be redirected back to confirm authentication"
+            ]
+        }
+    except Exception as e:
+        logger.error(f"Error initiating auth: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/callback")
+def spotify_callback(code: str):
+    """Handle Spotify OAuth callback"""
+    try:
+        current_agent = get_agent()
+        spotify_client = current_agent.spotify_client
+        
+        # Exchange code for token
+        token_info = spotify_client.sp.auth_manager.get_access_token(code)
+        
+        if token_info:
+            # Try to get user info to confirm it worked
+            try:
+                profile = spotify_client.get_current_user_profile()
+                user_name = profile.get("display_name", "Unknown User")
+                
+                return {
+                    "status": "success",
+                    "message": f"Successfully authenticated with Spotify!",
+                    "user": user_name,
+                    "instructions": [
+                        "✅ Authentication complete!",
+                        "✅ You can now use all app features",
+                        "🎵 Try: /devices to see your Spotify devices",
+                        "🎵 Try: /run to discover podcast episodes"
+                    ]
+                }
+            except Exception as e:
+                logger.warning(f"Auth succeeded but couldn't get profile: {str(e)}")
+                return {
+                    "status": "success",
+                    "message": "Authentication completed, but couldn't fetch profile",
+                    "note": "This is usually fine - try using the app features"
+                }
+        else:
+            raise HTTPException(status_code=400, detail="Failed to get access token")
+            
+    except Exception as e:
+        logger.error(f"Error in callback: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/auth/status")
+def check_auth_status():
+    """Check if the user is authenticated"""
+    try:
+        current_agent = get_agent()
+        
+        # Try to get user profile to test authentication
+        try:
+            profile = current_agent.spotify_client.get_current_user_profile()
+            if profile:
+                return {
+                    "authenticated": True,
+                    "user": profile.get("display_name", "Unknown"),
+                    "user_id": profile.get("id"),
+                    "country": profile.get("country"),
+                    "message": "✅ User is authenticated and ready to use the app"
+                }
+        except Exception as auth_error:
+            logger.info(f"User not authenticated: {str(auth_error)}")
+            
+        # If we get here, user is not authenticated
+        base_url = os.getenv('SPOTIFY_REDIRECT_URI', '').replace('/callback', '')
+        return {
+            "authenticated": False,
+            "message": "❌ User needs to authenticate with Spotify",
+            "instructions": [
+                "1. Visit the auth_url below to authenticate",
+                "2. Log in to your Spotify account", 
+                "3. Authorize the app",
+                "4. Come back and check your devices with /devices"
+            ],
+            "auth_url": f"{base_url}/auth"
+        }
+            
+    except Exception as e:
+        logger.error(f"Error checking auth status: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+# ===== EXISTING ENDPOINTS =====
 @app.get("/debug/env")
 def debug_env():
     """Debug endpoint to check environment variables"""
-    import os
     return {
         "has_openai_key": bool(os.getenv("OPENAI_API_KEY")),
         "has_spotify_client_id": bool(os.getenv("SPOTIFY_CLIENT_ID")),
         "has_spotify_client_secret": bool(os.getenv("SPOTIFY_CLIENT_SECRET")),
         "has_spotify_redirect_uri": bool(os.getenv("SPOTIFY_REDIRECT_URI")),
+        "redirect_uri": os.getenv("SPOTIFY_REDIRECT_URI"),
         "python_version": os.sys.version,
         "current_agent_status": "initialized" if agent is not None else "not_initialized"
     }
-
-@app.get("/mcp/servers")
-async def list_mcp_servers():
-    """List all registered MCP servers and their capabilities"""
-    try:
-        current_agent = get_agent()
-        servers_info = []
-        
-        for server_name in ["spotify", "llm", "queue"]:
-            try:
-                # Get tools
-                tools = await current_agent.mcp_client.list_server_tools(server_name)
-                
-                # Get resources
-                resources = await current_agent.mcp_client.list_server_resources(server_name)
-                
-                servers_info.append({
-                    "name": server_name,
-                    "tools": [tool.dict() for tool in tools],
-                    "resources": [resource.dict() for resource in resources]
-                })
-            except Exception as e:
-                logger.error(f"Error getting info for MCP server {server_name}: {str(e)}")
-        
-        return {"servers": servers_info}
-    except Exception as e:
-        logger.error(f"Error listing MCP servers: {str(e)}")
-        raise HTTPException(status_code=500, detail=str(e))
-
-@app.post("/mcp/call")
-async def call_mcp_tool(server_name: str, tool_name: str, arguments: Dict[str, Any] = None):
-    """Call a tool on a specific MCP server"""
-    try:
-        current_agent = get_agent()
-        result = await current_agent.mcp_client.send_request(
-            server_name, "tools/call",
-            {
-                "name": tool_name,
-                "arguments": arguments or {}
-            }
-        )
-        return {"result": result}
-    except Exception as e:
-        logger.error(f"Error calling MCP tool {tool_name} on {server_name}: {str(e)}")
-        raise HTTPException(status_code=500, detail=str(e))
-
-@app.get("/mcp/resources/{server_name}")
-async def get_mcp_resource(server_name: str, uri: str):
-    """Read a resource from a specific MCP server"""
-    try:
-        current_agent = get_agent()
-        result = await current_agent.mcp_client.send_request(
-            server_name, "resources/read",
-            {"uri": uri}
-        )
-        return result
-    except Exception as e:
-        logger.error(f"Error reading MCP resource {uri} from {server_name}: {str(e)}")
-        raise HTTPException(status_code=500, detail=str(e))
-
-@app.get("/preferences")
-def get_preferences():
-    current_agent = get_agent()
-    return {"preferences": [pref.dict() for pref in current_agent.get_podcast_preferences()]}
-
-@app.post("/preferences")
-def add_preference(preference: PreferenceCreate):
-    try:
-        if not preference.show_name and not preference.show_id and not preference.topics:
-            raise HTTPException(
-                status_code=400, 
-                detail="At least one of show_name, show_id, or topics must be provided"
-            )
-        
-        current_agent = get_agent()
-        pref = PodcastPreference(**preference.dict())
-        current_agent.add_podcast_preference(pref)
-        
-        return {"status": "success", "message": "Preference added", "preference": pref.dict()}
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"Error adding preference: {str(e)}")
-        raise HTTPException(status_code=500, detail=str(e))
-
-@app.post("/run")
-async def run_agent():
-    """Run the MCP agent"""
-    try:
-        current_agent = get_agent()
-        result = await current_agent.run()
-        return result
-    except Exception as e:
-        logger.error(f"Error running MCP agent: {str(e)}")
-        raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/status")
 async def get_status():
@@ -241,12 +256,76 @@ async def get_status():
             "preferences_count": len(current_agent.get_podcast_preferences()),
             "processed_episodes_count": len(current_agent.processed_episodes),
             "pending_episodes_count": pending_count,
-            "mcp_servers": ["spotify", "llm", "queue"]
+            "mcp_servers": ["spotify", "llm", "queue"],
+            "auth_note": "Use /auth/status to check if you're authenticated"
         }
     except Exception as e:
         logger.error(f"Error getting status: {str(e)}")
         return {"status": "error", "message": str(e)}
 
+@app.get("/preferences")
+def get_preferences():
+    current_agent = get_agent()
+    return {"preferences": [pref.dict() for pref in current_agent.get_podcast_preferences()]}
+
+@app.post("/preferences")
+def add_preference(preference: PreferenceCreate):
+    try:
+        if not preference.show_name and not preference.show_id and not preference.topics:
+            raise HTTPException(
+                status_code=400, 
+                detail="At least one of show_name, show_id, or topics must be provided"
+            )
+        
+        current_agent = get_agent()
+        pref = PodcastPreference(**preference.dict())
+        current_agent.add_podcast_preference(pref)
+        
+        return {"status": "success", "message": "Preference added", "preference": pref.dict()}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error adding preference: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/devices")
+async def get_devices():
+    """Get Spotify devices via MCP"""
+    try:
+        current_agent = get_agent()
+        devices = await current_agent.mcp_client.send_request(
+            "spotify", "tools/call",
+            {"name": "get_devices", "arguments": {}}
+        )
+        
+        if not devices.get("devices"):
+            return {
+                "devices": [],
+                "message": "No devices found - you may need to authenticate first",
+                "suggestion": "Try /auth/status to check if you're authenticated with your personal Spotify account"
+            }
+        
+        return devices
+    except Exception as e:
+        logger.error(f"Error getting devices: {str(e)}")
+        return {
+            "devices": [],
+            "error": str(e),
+            "suggestion": "Try authenticating first with /auth"
+        }
+
+@app.post("/run")
+async def run_agent():
+    """Run the MCP agent"""
+    try:
+        current_agent = get_agent()
+        result = await current_agent.run()
+        return result
+    except Exception as e:
+        logger.error(f"Error running MCP agent: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+# Additional endpoints remain the same...
 @app.post("/reset-episodes")
 def reset_episodes():
     try:
@@ -270,20 +349,6 @@ async def process_pending():
         return result
     except Exception as e:
         logger.error(f"Error processing pending episodes: {str(e)}")
-        raise HTTPException(status_code=500, detail=str(e))
-
-@app.get("/devices")
-async def get_devices():
-    """Get Spotify devices via MCP"""
-    try:
-        current_agent = get_agent()
-        devices = await current_agent.mcp_client.send_request(
-            "spotify", "tools/call",
-            {"name": "get_devices", "arguments": {}}
-        )
-        return devices
-    except Exception as e:
-        logger.error(f"Error getting devices: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/start-playback")
@@ -312,10 +377,8 @@ async def start_playback(device_id: Optional[str] = None):
 
 def start_api():
     """Start the MCP-enabled API server"""
-    import os
     port = int(os.environ.get("PORT", 8000))
     
-    # For Heroku deployment, use simpler configuration
     uvicorn.run(
         "spotify_agent.mcp_api.api:app",
         host="0.0.0.0", 
