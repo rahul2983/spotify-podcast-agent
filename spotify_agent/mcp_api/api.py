@@ -74,6 +74,12 @@ class PreferenceCreate(BaseModel):
     min_duration_minutes: Optional[int] = None
     max_duration_minutes: Optional[int] = None
 
+class AgentConfigUpdate(BaseModel):
+    check_frequency: Optional[str] = None
+    relevance_threshold: Optional[float] = None
+    max_episodes_per_run: Optional[int] = None
+    use_vector_memory: Optional[bool] = None
+
 # API Routes
 @app.get("/")
 def read_root():
@@ -196,6 +202,67 @@ def check_auth_status():
             
     except Exception as e:
         logger.error(f"Error checking auth status: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+    
+
+@app.get("/config")
+def get_config():
+    """Get the current agent configuration"""
+    try:
+        current_agent = get_agent()
+        return {
+            "check_frequency": current_agent.config.check_frequency,
+            "relevance_threshold": current_agent.config.relevance_threshold,
+            "max_episodes_per_run": current_agent.config.max_episodes_per_run,
+            "use_vector_memory": current_agent.config.use_vector_memory,
+            "preferences_count": len(current_agent.config.podcast_preferences),
+            "current_settings": "These are the active agent configuration settings"
+        }
+    except Exception as e:
+        logger.error(f"Error getting configuration: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.put("/config")
+def update_config(config_update: AgentConfigUpdate):
+    """Update the agent configuration"""
+    try:
+        current_agent = get_agent()
+        update_dict = config_update.dict(exclude_none=True)
+        
+        # Validate values
+        if "relevance_threshold" in update_dict:
+            if not 0.0 <= update_dict["relevance_threshold"] <= 1.0:
+                raise HTTPException(status_code=400, detail="Relevance threshold must be between 0.0 and 1.0")
+        
+        if "max_episodes_per_run" in update_dict:
+            if update_dict["max_episodes_per_run"] < 1 or update_dict["max_episodes_per_run"] > 20:
+                raise HTTPException(status_code=400, detail="Max episodes per run must be between 1 and 20")
+        
+        if "check_frequency" in update_dict:
+            if update_dict["check_frequency"] not in ["daily", "weekly"]:
+                raise HTTPException(status_code=400, detail="Check frequency must be 'daily' or 'weekly'")
+        
+        # Apply updates
+        for key, value in update_dict.items():
+            if hasattr(current_agent.config, key):
+                setattr(current_agent.config, key, value)
+                logger.info(f"Updated config: {key} = {value}")
+        
+        return {
+            "status": "success", 
+            "message": "Configuration updated successfully", 
+            "updated_fields": list(update_dict.keys()),
+            "config": {
+                "check_frequency": current_agent.config.check_frequency,
+                "relevance_threshold": current_agent.config.relevance_threshold,
+                "max_episodes_per_run": current_agent.config.max_episodes_per_run,
+                "use_vector_memory": current_agent.config.use_vector_memory
+            }
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error updating configuration: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
 
 # ===== EXISTING ENDPOINTS =====
