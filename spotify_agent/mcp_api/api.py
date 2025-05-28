@@ -315,15 +315,62 @@ async def get_devices():
         }
 
 @app.post("/run")
-async def run_agent():
-    """Run the MCP agent"""
+async def run_agent(background_tasks: BackgroundTasks):
+    """Run the MCP agent in background"""
     try:
         current_agent = get_agent()
-        result = await current_agent.run()
-        return result
+        
+        # Add the agent run to background tasks
+        background_tasks.add_task(run_agent_background, current_agent)
+        
+        return {
+            "status": "started",
+            "message": "Agent started in background - check /status for results",
+            "timestamp": datetime.now().isoformat(),
+            "instructions": [
+                "🤖 Agent is running in the background",
+                "⏱️  This may take 1-2 minutes",
+                "📊 Check /status to see progress",
+                "🎵 Episodes will be added to your Spotify queue automatically"
+            ]
+        }
     except Exception as e:
-        logger.error(f"Error running MCP agent: {str(e)}")
+        logger.error(f"Error starting MCP agent: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
+
+async def run_agent_background(agent):
+    """Background task to run the agent"""
+    try:
+        logger.info("Starting background agent run...")
+        result = await agent.run()
+        logger.info(f"Background agent run completed: {result}")
+        
+        # You could store the result in a database or cache here
+        # For now, we'll just log it
+        
+        if result.get("episodes"):
+            logger.info(f"✅ Added {len(result['episodes'])} episodes to queue")
+            for episode_data in result["episodes"]:
+                episode = episode_data["episode"]
+                logger.info(f"  🎵 {episode.get('name', 'Unknown')} - {episode_data.get('summary', 'No summary')}")
+        else:
+            logger.info("ℹ️  No new episodes found this run")
+            
+    except Exception as e:
+        logger.error(f"Error in background agent run: {str(e)}")
+
+@app.get("/run/status")
+def get_run_status():
+    """Get the status of the last agent run"""
+    # This is a simple implementation - in production you'd use a database
+    return {
+        "message": "Check the logs for the latest run status",
+        "instructions": [
+            "Use 'heroku logs --tail' to see real-time agent activity",
+            "Look for messages like '✅ Added X episodes to queue'",
+            "Episodes are automatically added to your Spotify queue"
+        ]
+    }
 
 # Additional endpoints remain the same...
 @app.post("/reset-episodes")

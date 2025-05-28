@@ -1,3 +1,5 @@
+# Update your spotify_agent/config.py to use faster settings for production:
+
 import os
 from pydantic import BaseModel
 from typing import List, Optional
@@ -27,9 +29,9 @@ class AgentConfig(BaseModel):
     spotify_client_secret: str = os.getenv("SPOTIFY_CLIENT_SECRET", "")
     spotify_redirect_uri: str = os.getenv("SPOTIFY_REDIRECT_URI", "http://127.0.0.1:8000/callback")
     check_frequency: str = "daily"  # 'daily' or 'weekly'
-    relevance_threshold: float = 0.7  # 0.0 to 1.0, how relevant episode must be to be added
-    max_episodes_per_run: int = 5  # Maximum episodes to add in a single run
-    use_vector_memory: bool = False  # Whether to store episode data in vector DB
+    relevance_threshold: float = 0.6  # Lower threshold for faster processing
+    max_episodes_per_run: int = 3     # Reduced from 5 to 3 for faster processing
+    use_vector_memory: bool = False   # Keep false for faster startup
     podcast_preferences: List[PodcastPreference] = []
 
     class Config:
