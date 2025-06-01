@@ -1,0 +1,612 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MCP Spotify Podcast Agent Architecture</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            margin: 0;
+            padding: 20px;
+            min-height: 100vh;
+        }
+        
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            background: rgba(255, 255, 255, 0.95);
+            border-radius: 20px;
+            padding: 30px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.1);
+            backdrop-filter: blur(10px);
+        }
+        
+        h1 {
+            text-align: center;
+            color: #2c3e50;
+            font-size: 2.5em;
+            margin-bottom: 10px;
+            background: linear-gradient(45deg, #667eea, #764ba2);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+        
+        .subtitle {
+            text-align: center;
+            color: #7f8c8d;
+            font-size: 1.2em;
+            margin-bottom: 40px;
+        }
+        
+        .architecture-diagram {
+            background: #f8f9fa;
+            border-radius: 15px;
+            padding: 30px;
+            margin: 30px 0;
+            box-shadow: inset 0 2px 10px rgba(0, 0, 0, 0.05);
+        }
+        
+        .layer {
+            margin: 20px 0;
+            padding: 20px;
+            border-radius: 12px;
+            position: relative;
+            transition: transform 0.3s ease, box-shadow 0.3s ease;
+        }
+        
+        .layer:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 15px 30px rgba(0, 0, 0, 0.1);
+        }
+        
+        .presentation-layer {
+            background: linear-gradient(135deg, #ff9a9e 0%, #fecfef 100%);
+            border: 3px solid #ff6b9d;
+        }
+        
+        .orchestration-layer {
+            background: linear-gradient(135deg, #a8edea 0%, #fed6e3 100%);
+            border: 3px solid #00d4aa;
+        }
+        
+        .mcp-layer {
+            background: linear-gradient(135deg, #ffecd2 0%, #fcb69f 100%);
+            border: 3px solid #ff8a65;
+        }
+        
+        .services-layer {
+            background: linear-gradient(135deg, #84fab0 0%, #8fd3f4 100%);
+            border: 3px solid #00bfa5;
+        }
+        
+        .external-layer {
+            background: linear-gradient(135deg, #cfd9df 0%, #e2ebf0 100%);
+            border: 3px solid #607d8b;
+        }
+        
+        .layer-title {
+            font-size: 1.4em;
+            font-weight: bold;
+            color: #2c3e50;
+            margin-bottom: 15px;
+            display: flex;
+            align-items: center;
+        }
+        
+        .layer-icon {
+            font-size: 1.8em;
+            margin-right: 10px;
+        }
+        
+        .components {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 15px;
+        }
+        
+        .component {
+            background: rgba(255, 255, 255, 0.9);
+            padding: 15px;
+            border-radius: 8px;
+            border-left: 4px solid #3498db;
+            transition: all 0.3s ease;
+        }
+        
+        .component:hover {
+            transform: scale(1.05);
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);
+        }
+        
+        .component-title {
+            font-weight: bold;
+            color: #2c3e50;
+            margin-bottom: 8px;
+        }
+        
+        .component-desc {
+            color: #7f8c8d;
+            font-size: 0.9em;
+            line-height: 1.4;
+        }
+        
+        .mcp-servers {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 20px;
+            margin-top: 15px;
+        }
+        
+        .mcp-server {
+            background: rgba(255, 255, 255, 0.95);
+            padding: 20px;
+            border-radius: 12px;
+            text-align: center;
+            border: 2px solid #e74c3c;
+            transition: all 0.3s ease;
+        }
+        
+        .mcp-server:hover {
+            transform: translateY(-8px);
+            box-shadow: 0 15px 30px rgba(231, 76, 60, 0.2);
+        }
+        
+        .mcp-server-icon {
+            font-size: 2.5em;
+            margin-bottom: 10px;
+        }
+        
+        .spotify-server { border-color: #1db954; }
+        .llm-server { border-color: #ff6b6b; }
+        .queue-server { border-color: #4ecdc4; }
+        
+        .arrows {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            margin: 10px 0;
+            font-size: 2em;
+            color: #3498db;
+        }
+        
+        .flow-section {
+            margin: 40px 0;
+            padding: 25px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            border-radius: 15px;
+            color: white;
+        }
+        
+        .flow-title {
+            font-size: 1.8em;
+            margin-bottom: 20px;
+            text-align: center;
+        }
+        
+        .flow-steps {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 20px;
+        }
+        
+        .flow-step {
+            background: rgba(255, 255, 255, 0.1);
+            padding: 20px;
+            border-radius: 10px;
+            text-align: center;
+            backdrop-filter: blur(5px);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+        }
+        
+        .step-number {
+            font-size: 2em;
+            font-weight: bold;
+            margin-bottom: 10px;
+            color: #ffd700;
+        }
+        
+        .benefits-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 25px;
+            margin: 30px 0;
+        }
+        
+        .benefit-card {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 25px;
+            border-radius: 15px;
+            text-align: center;
+            transition: transform 0.3s ease;
+        }
+        
+        .benefit-card:hover {
+            transform: translateY(-10px);
+        }
+        
+        .benefit-icon {
+            font-size: 3em;
+            margin-bottom: 15px;
+        }
+        
+        .comparison-table {
+            background: white;
+            border-radius: 12px;
+            overflow: hidden;
+            box-shadow: 0 5px 20px rgba(0, 0, 0, 0.1);
+            margin: 30px 0;
+        }
+        
+        .comparison-table table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+        
+        .comparison-table th {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 20px;
+            text-align: left;
+            font-weight: bold;
+        }
+        
+        .comparison-table td {
+            padding: 15px 20px;
+            border-bottom: 1px solid #ecf0f1;
+        }
+        
+        .comparison-table tr:hover {
+            background: #f8f9fa;
+        }
+        
+        .code-block {
+            background: #2c3e50;
+            color: #ecf0f1;
+            padding: 20px;
+            border-radius: 10px;
+            font-family: 'Monaco', 'Consolas', monospace;
+            font-size: 0.9em;
+            overflow-x: auto;
+            margin: 20px 0;
+        }
+        
+        .highlight {
+            background: #f39c12;
+            color: white;
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-weight: bold;
+        }
+        
+        @media (max-width: 768px) {
+            .mcp-servers {
+                grid-template-columns: 1fr;
+            }
+            
+            .benefits-grid {
+                grid-template-columns: 1fr;
+            }
+            
+            .components {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🎵 MCP Spotify Podcast Agent</h1>
+        <p class="subtitle">Model Context Protocol Architecture for Intelligent Podcast Discovery</p>
+        
+        <div class="architecture-diagram">
+            <div class="layer presentation-layer">
+                <div class="layer-title">
+                    <span class="layer-icon">🌐</span>
+                    Presentation Layer
+                </div>
+                <div class="components">
+                    <div class="component">
+                        <div class="component-title">FastAPI Server</div>
+                        <div class="component-desc">RESTful API endpoints for external access</div>
+                    </div>
+                    <div class="component">
+                        <div class="component-title">MCP Endpoints</div>
+                        <div class="component-desc">Direct MCP server communication routes</div>
+                    </div>
+                    <div class="component">
+                        <div class="component-title">CLI Interface</div>
+                        <div class="component-desc">Command-line interface for manual runs</div>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="arrows">⬇️</div>
+            
+            <div class="layer orchestration-layer">
+                <div class="layer-title">
+                    <span class="layer-icon">🎯</span>
+                    Orchestration Layer
+                </div>
+                <div class="components">
+                    <div class="component">
+                        <div class="component-title">MCP Podcast Agent</div>
+                        <div class="component-desc">Main orchestrator coordinating all MCP servers</div>
+                    </div>
+                    <div class="component">
+                        <div class="component-title">MCP Client</div>
+                        <div class="component-desc">Central communication hub for all MCP servers</div>
+                    </div>
+                    <div class="component">
+                        <div class="component-title">Configuration Manager</div>
+                        <div class="component-desc">Handles preferences and system settings</div>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="arrows">⬇️</div>
+            
+            <div class="layer mcp-layer">
+                <div class="layer-title">
+                    <span class="layer-icon">🔌</span>
+                    MCP Protocol Layer
+                </div>
+                <div class="mcp-servers">
+                    <div class="mcp-server spotify-server">
+                        <div class="mcp-server-icon">🎵</div>
+                        <div class="component-title">Spotify MCP Server</div>
+                        <div class="component-desc">
+                            <strong>Tools:</strong><br>
+                            • search_podcasts<br>
+                            • get_show_episodes<br>
+                            • add_to_queue<br>
+                            • get_devices<br>
+                            • start_playback<br><br>
+                            <strong>Resources:</strong><br>
+                            • User Profile<br>
+                            • Devices<br>
+                            • Recently Played
+                        </div>
+                    </div>
+                    <div class="mcp-server llm-server">
+                        <div class="mcp-server-icon">🧠</div>
+                        <div class="component-title">LLM MCP Server</div>
+                        <div class="component-desc">
+                            <strong>Tools:</strong><br>
+                            • evaluate_episode<br>
+                            • generate_summary<br><br>
+                            <strong>Capabilities:</strong><br>
+                            • Relevance scoring<br>
+                            • Content analysis<br>
+                            • Reasoning generation
+                        </div>
+                    </div>
+                    <div class="mcp-server queue-server">
+                        <div class="mcp-server-icon">📋</div>
+                        <div class="component-title">Queue MCP Server</div>
+                        <div class="component-desc">
+                            <strong>Tools:</strong><br>
+                            • add_pending<br>
+                            • get_pending<br>
+                            • remove_processed<br><br>
+                            <strong>Resources:</strong><br>
+                            • Pending Episodes<br>
+                            • Queue Status
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="arrows">⬇️</div>
+            
+            <div class="layer services-layer">
+                <div class="layer-title">
+                    <span class="layer-icon">⚙️</span>
+                    Core Services Layer
+                </div>
+                <div class="components">
+                    <div class="component">
+                        <div class="component-title">Spotify Client</div>
+                        <div class="component-desc">Direct Spotify Web API integration</div>
+                    </div>
+                    <div class="component">
+                        <div class="component-title">LLM Agent</div>
+                        <div class="component-desc">OpenAI GPT-4 powered evaluation engine</div>
+                    </div>
+                    <div class="component">
+                        <div class="component-title">Queue Manager</div>
+                        <div class="component-desc">Episode queue and state management</div>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="arrows">⬇️</div>
+            
+            <div class="layer external-layer">
+                <div class="layer-title">
+                    <span class="layer-icon">🌍</span>
+                    External Services
+                </div>
+                <div class="components">
+                    <div class="component">
+                        <div class="component-title">Spotify Web API</div>
+                        <div class="component-desc">Podcast search, episodes, queue management</div>
+                    </div>
+                    <div class="component">
+                        <div class="component-title">OpenAI API</div>
+                        <div class="component-desc">GPT-4 for episode evaluation and summarization</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="flow-section">
+            <div class="flow-title">🔄 MCP Communication Flow</div>
+            <div class="flow-steps">
+                <div class="flow-step">
+                    <div class="step-number">1</div>
+                    <div><strong>API Request</strong><br>User/Scheduler triggers discovery</div>
+                </div>
+                <div class="flow-step">
+                    <div class="step-number">2</div>
+                    <div><strong>MCP Agent</strong><br>Orchestrates MCP server calls</div>
+                </div>
+                <div class="flow-step">
+                    <div class="step-number">3</div>
+                    <div><strong>Spotify Server</strong><br>Search & fetch episodes</div>
+                </div>
+                <div class="flow-step">
+                    <div class="step-number">4</div>
+                    <div><strong>LLM Server</strong><br>Evaluate relevance & summarize</div>
+                </div>
+                <div class="flow-step">
+                    <div class="step-number">5</div>
+                    <div><strong>Queue Server</strong><br>Manage pending episodes</div>
+                </div>
+                <div class="flow-step">
+                    <div class="step-number">6</div>
+                    <div><strong>Result</strong><br>Episodes added to Spotify queue</div>
+                </div>
+            </div>
+        </div>
+        
+        <h2 style="text-align: center; color: #2c3e50; margin: 40px 0 30px;">🚀 MCP Architecture Benefits</h2>
+        
+        <div class="benefits-grid">
+            <div class="benefit-card">
+                <div class="benefit-icon">🔧</div>
+                <h3>Modular Design</h3>
+                <p>Each MCP server handles specific concerns. Easy to test, maintain, and extend individual components without affecting others.</p>
+            </div>
+            <div class="benefit-card">
+                <div class="benefit-icon">🔄</div>
+                <h3>Standardized Communication</h3>
+                <p>All inter-component communication uses consistent MCP protocol with structured request/response patterns.</p>
+            </div>
+            <div class="benefit-card">
+                <div class="benefit-icon">🎯</div>
+                <h3>Enhanced Extensibility</h3>
+                <p>Add new MCP servers (calendar, email, etc.) without changing core agent logic. Swap implementations seamlessly.</p>
+            </div>
+            <div class="benefit-card">
+                <div class="benefit-icon">🛡️</div>
+                <h3>Better Error Handling</h3>
+                <p>Standardized error responses, graceful degradation when services fail, and comprehensive logging throughout.</p>
+            </div>
+        </div>
+        
+        <h2 style="text-align: center; color: #2c3e50; margin: 40px 0 30px;">📊 Architecture Comparison</h2>
+        
+        <div class="comparison-table">
+            <table>
+                <thead>
+                    <tr>
+                        <th>Aspect</th>
+                        <th>Legacy Architecture</th>
+                        <th>MCP Architecture</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td><strong>Communication</strong></td>
+                        <td>Direct method calls, tight coupling</td>
+                        <td>Standardized MCP protocol, loose coupling</td>
+                    </tr>
+                    <tr>
+                        <td><strong>Testing</strong></td>
+                        <td>Mock entire agent for unit tests</td>
+                        <td>Test individual MCP servers in isolation</td>
+                    </tr>
+                    <tr>
+                        <td><strong>Extensibility</strong></td>
+                        <td>Modify core agent for new features</td>
+                        <td>Add new MCP servers without core changes</td>
+                    </tr>
+                    <tr>
+                        <td><strong>Error Handling</strong></td>
+                        <td>Inconsistent error patterns</td>
+                        <td>Standardized MCP error responses</td>
+                    </tr>
+                    <tr>
+                        <td><strong>Debugging</strong></td>
+                        <td>Limited visibility into internals</td>
+                        <td>MCP protocol provides structured debugging</td>
+                    </tr>
+                    <tr>
+                        <td><strong>Deployment</strong></td>
+                        <td>Monolithic deployment</td>
+                        <td>Can distribute MCP servers independently</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+        
+        <h2 style="text-align: center; color: #2c3e50; margin: 40px 0 30px;">💻 MCP Protocol Examples</h2>
+        
+        <h3>MCP Message Structure</h3>
+        <div class="code-block">
+{
+  "type": "request",
+  "method": "tools/call",
+  "params": {
+    "name": "search_podcasts",
+    "arguments": {
+      "query": "artificial intelligence",
+      "limit": 5
+    }
+  }
+}
+        </div>
+        
+        <h3>MCP Server Registration</h3>
+        <div class="code-block">
+# Register MCP servers with client
+mcp_client = MCPClient()
+
+spotify_server = SpotifyMCPServer(spotify_client)
+mcp_client.register_server("spotify", spotify_server)
+
+llm_server = LLMMCPServer(llm_agent)
+mcp_client.register_server("llm", llm_server)
+
+queue_server = QueueMCPServer(queue_manager)
+mcp_client.register_server("queue", queue_server)
+        </div>
+        
+        <h3>Cross-Server Communication</h3>
+        <div class="code-block">
+# Agent orchestrates multiple MCP servers
+async def discover_episodes(self):
+    # 1. Search via Spotify MCP server
+    episodes = await self.mcp_client.send_request(
+        "spotify", "tools/call",
+        {"name": "search_podcasts", "arguments": {"query": "tech"}}
+    )
+    
+    # 2. Evaluate via LLM MCP server
+    for episode in episodes:
+        evaluation = await self.mcp_client.send_request(
+            "llm", "tools/call",
+            {"name": "evaluate_episode", "arguments": {...}}
+        )
+        
+        # 3. Queue if relevant
+        if evaluation["relevance_score"] > threshold:
+            await self.mcp_client.send_request(
+                "queue", "tools/call",
+                {"name": "add_pending", "arguments": {"episodes": [episode]}}
+            )
+        </div>
+        
+        <div style="text-align: center; margin: 50px 0; padding: 30px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); border-radius: 15px; color: white;">
+            <h2>🎯 Result: A Modern, Scalable Architecture</h2>
+            <p style="font-size: 1.1em; margin: 0;">
+                The MCP-based Spotify Podcast Agent transforms a monolithic system into a 
+                <span class="highlight">modular, extensible, and maintainable</span> architecture while 
+                preserving all existing functionality and adding powerful new capabilities.
+            </p>
+        </div>
+    </div>
+</body>
+</html>

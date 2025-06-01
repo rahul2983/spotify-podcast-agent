@@ -1,0 +1,7 @@
+"""
+MCP-enabled FastAPI server
+"""
+
+from .api import start_api
+
+__all__ = ['start_api']

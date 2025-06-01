@@ -6,8 +6,10 @@ from .protocol import MCPServer, MCPClient, MCPMessage, MCPResource, MCPTool
 from .spotify_server import SpotifyMCPServer
 from .llm_server import LLMMCPServer
 from .queue_server import QueueMCPServer
+from .email_server import EmailMCPServer
+from .calendar_server import CalendarMCPServer
 
 __all__ = [
     'MCPServer', 'MCPClient', 'MCPMessage', 'MCPResource', 'MCPTool',
-    'SpotifyMCPServer', 'LLMMCPServer', 'QueueMCPServer'
+    'SpotifyMCPServer', 'LLMMCPServer', 'QueueMCPServer', 'EmailMCPServer', 'CalendarMCPServer'
 ]

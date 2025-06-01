@@ -1,0 +1,45 @@
+version: '3.8'
+
+services:
+  spotify-agent:
+    build: 
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "8000:8000"
+    env_file:
+      - .env
+    environment:
+      - PYTHONPATH=/app
+      - PYTHONUNBUFFERED=1
+    volumes:
+      - ./logs:/app/logs
+      - spotify_cache:/home/app/.spotify_podcast_agent
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    depends_on:
+      - redis
+    networks:
+      - spotify-network
+
+  # Optional: Add Redis for caching (production ready)
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    volumes:
+      - redis_data:/data
+    networks:
+      - spotify-network
+
+volumes:
+  spotify_cache:
+  redis_data:
+
+networks:
+  spotify-network:
+    driver: bridge
