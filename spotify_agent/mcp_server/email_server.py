@@ -1,5 +1,5 @@
 """
-MCP Server for Email operations - FIXED VERSION
+MCP Server for Email operations - FIXED VERSION WITH DEBUG
 """
 from typing import Dict, Any, List
 from datetime import datetime
@@ -73,6 +73,17 @@ class EmailMCPServer(MCPServer):
                         "stats": {"type": "object", "description": "Weekly stats"}
                     },
                     "required": ["to_email", "episodes"]
+                }
+            ),
+            "test_email_with_debug": MCPTool(
+                name="test_email_with_debug",
+                description="Test email with known problematic content to debug Unicode issues",
+                input_schema={
+                    "type": "object",
+                    "properties": {
+                        "to_email": {"type": "string", "description": "Recipient email"}
+                    },
+                    "required": ["to_email"]
                 }
             )
         })
@@ -167,97 +178,124 @@ class EmailMCPServer(MCPServer):
                 arguments.get("stats", {})
             )
         
+        elif name == "test_email_with_debug":
+            return await self.test_email_with_debug(arguments["to_email"])
+        
         else:
             raise ValueError(f"Unknown tool: {name}")
     
+    async def test_email_with_debug(self, to_email: str) -> Dict[str, Any]:
+        """Test email with known problematic content to debug Unicode issues"""
+        
+        # Test with known problematic content
+        test_cases = [
+            "Simple ASCII text",
+            "Text with\xa0non-breaking space",
+            "Text with — em dash",
+            "Text with "smart quotes"",
+            "Text with…ellipsis",
+        ]
+        
+        for i, test_content in enumerate(test_cases):
+            logger.error(f"=== Testing case {i}: {repr(test_content)} ===")
+            
+            # Clean the content
+            cleaned = self._clean_text(test_content)
+            logger.error(f"Cleaned to: {repr(cleaned)}")
+            
+            # Test ASCII encoding
+            try:
+                cleaned.encode('ascii')
+                logger.error("✓ ASCII encoding successful")
+            except UnicodeEncodeError as e:
+                logger.error(f"✗ ASCII encoding failed: {e}")
+        
+        # Now test with minimal email
+        minimal_subject = "Test Email"
+        minimal_content = "This is a test email with basic content."
+        
+        logger.error(f"Testing minimal email: subject={repr(minimal_subject)}, content={repr(minimal_content)}")
+        
+        success = await self._send_email(to_email, minimal_subject, minimal_content, is_html=False)
+        
+        return {
+            "success": success,
+            "message": "Test completed - check logs for details",
+            "test_cases_count": len(test_cases)
+        }
+    
     def _clean_text(self, text: str) -> str:
-        """Clean text to remove ALL problematic characters - aggressive approach"""
+        """Ultra-aggressive text cleaning - removes ALL non-ASCII characters"""
         if not text:
             return ""
         
         # Convert to string if not already
         text = str(text)
         
-        # Debug: Log what we're cleaning
-        logger.debug(f"Original text (first 100 chars): {repr(text[:100])}")
-        
-        # Step 1: Replace ALL Unicode whitespace with regular space
-        # This is more comprehensive than just replacing \xa0
-        text = re.sub(r'\s+', ' ', text)  # Replace any whitespace sequence with single space
-        
-        # Step 2: Replace specific problematic characters
-        replacements = {
-            '\xa0': ' ',     # non-breaking space
-            '\u00a0': ' ',   # another way to represent non-breaking space
-            '\u2013': '-',   # en dash
-            '\u2014': '--',  # em dash
-            '\u2018': "'",   # left single quote
-            '\u2019': "'",   # right single quote
-            '\u201c': '"',   # left double quote
-            '\u201d': '"',   # right double quote
-            '\u2026': '...',  # ellipsis
-            '\u00a9': '(c)', # copyright symbol
-            '\u00ae': '(R)', # registered trademark
-            '\u2122': '(TM)', # trademark
-        }
-        
-        for old, new in replacements.items():
-            text = text.replace(old, new)
-        
-        # Step 3: Normalize unicode
-        text = unicodedata.normalize('NFKD', text)
-        
-        # Step 4: AGGRESSIVE cleaning - only keep safe characters
-        safe_chars = []
+        # Log the exact problematic characters
         for i, char in enumerate(text):
-            char_code = ord(char)
-            if char_code <= 127:  # Pure ASCII
-                safe_chars.append(char)
-            elif char.isprintable() and not unicodedata.combining(char):
-                # For non-ASCII chars, replace with closest ASCII equivalent or remove
-                if char_code == 160:  # Another non-breaking space variant
-                    safe_chars.append(' ')
-                else:
-                    # Try to get ASCII equivalent
-                    ascii_equiv = unicodedata.normalize('NFKD', char).encode('ascii', 'ignore').decode('ascii')
-                    if ascii_equiv:
-                        safe_chars.append(ascii_equiv)
-                    else:
-                        safe_chars.append('?')  # Replace with ? or skip entirely
-            # Skip combining characters and other problematic chars
+            if ord(char) > 127:
+                logger.error(f"Non-ASCII character at position {i}: {repr(char)} (code: {ord(char)})")
         
-        result = ''.join(safe_chars)
+        # Method 1: Brutal character-by-character filtering
+        ascii_only = ''.join(char if ord(char) < 128 else ' ' for char in text)
         
-        # Step 5: Final check - ensure no problematic characters remain
+        # Method 2: Multiple replacement passes for stubborn characters
+        replacements = [
+            ('\xa0', ' '),      # non-breaking space
+            ('\u00a0', ' '),    # unicode non-breaking space
+            ('\u2013', '-'),    # en dash
+            ('\u2014', '--'),   # em dash
+            ('\u2018', "'"),    # left single quote
+            ('\u2019', "'"),    # right single quote
+            ('\u201c', '"'),    # left double quote
+            ('\u201d', '"'),    # right double quote
+            ('\u2026', '...'),  # ellipsis
+            ('\u00a9', '(c)'),  # copyright symbol
+            ('\u00ae', '(R)'),  # registered trademark
+            ('\u2122', '(TM)'), # trademark
+        ]
+        
+        for old, new in replacements:
+            ascii_only = ascii_only.replace(old, new)
+        
+        # Method 3: Regex to remove any remaining problematic whitespace
+        import re
+        ascii_only = re.sub(r'[\x80-\xFF]', ' ', ascii_only)  # Remove high ASCII
+        ascii_only = re.sub(r'[\u0080-\uFFFF]', ' ', ascii_only)  # Remove Unicode
+        ascii_only = re.sub(r'\s+', ' ', ascii_only)  # Normalize whitespace
+        
+        # Method 4: Force encode/decode cycle
         try:
-            result.encode('ascii')
-            logger.debug(f"Cleaned text (first 100 chars): {repr(result[:100])}")
-            return result
+            # This will fail if any non-ASCII characters remain
+            ascii_only.encode('ascii')
         except UnicodeEncodeError as e:
-            logger.error(f"Text still contains non-ASCII after cleaning: {e}")
-            # Last resort: force ASCII
-            return result.encode('ascii', errors='replace').decode('ascii')
+            logger.error(f"STILL HAVE NON-ASCII AFTER CLEANING: {e}")
+            # Nuclear option: byte-level cleaning
+            ascii_only = ascii_only.encode('ascii', errors='replace').decode('ascii')
+        
+        # Final verification
+        final_result = ascii_only.strip()
+        
+        # Log the transformation
+        if text != final_result:
+            logger.error(f"Text transformation: {repr(text[:100])} -> {repr(final_result[:100])}")
+        
+        return final_result
     
+    # Updated _send_summary_email method with debugging
     async def _send_summary_email(self, to_email: str, episodes: List[Dict], 
-                                 subject: str, template: str) -> Dict[str, Any]:
-        """Send episode summary email with enhanced debugging"""
+                                subject: str, template: str) -> Dict[str, Any]:
+        """Send episode summary email with maximum debugging"""
         try:
             if not episodes:
                 return {"success": False, "message": "No episodes to summarize"}
             
-            # Debug each episode for problematic characters BEFORE processing
-            for i, ep in enumerate(episodes):
-                ep_name = str(ep.get('episode', {}).get('name', ''))
-                summary = str(ep.get('summary', ''))
-                if '\xa0' in ep_name or '\xa0' in summary:
-                    logger.error(f"Found \\xa0 in episode {i}: name={repr(ep_name[:50])}, summary={repr(summary[:50])}")
+            # DEBUG: Check all episode data for Unicode before processing
+            self.debug_episode_data(episodes)
             
-            # Generate HTML email content with aggressive cleaning
+            # Generate HTML with ultra-clean data
             html_content = self._generate_summary_html(episodes, template)
-            
-            # Debug the final content
-            logger.error(f"DEBUG - Subject: {repr(subject)}")
-            logger.error(f"DEBUG - Content preview: {repr(html_content[:200])}")
             
             # Send email
             success = await self._send_email(to_email, subject, html_content, is_html=True)
@@ -304,62 +342,108 @@ class EmailMCPServer(MCPServer):
             return {"success": False, "message": f"Error: {str(e)}"}
     
     async def _send_email(self, to_email: str, subject: str, content: str, is_html: bool = False) -> bool:
-        """Send email using SMTP with bulletproof encoding"""
+        """Ultra-safe email sending with maximum debugging"""
         try:
             if not self.smtp_username or not self.smtp_password:
                 logger.error("SMTP credentials not configured")
                 return False
             
-            # AGGRESSIVE cleaning
+            # Log the raw inputs first
+            logger.error(f"RAW SUBJECT: {repr(subject)}")
+            logger.error(f"RAW CONTENT (first 200 chars): {repr(content[:200])}")
+            
+            # Ultra-aggressive cleaning
             subject = self._clean_text(str(subject))
             content = self._clean_text(str(content))
             
-            # Debug the cleaned content
-            logger.debug(f"Final subject: {repr(subject[:50])}")
-            logger.debug(f"Final content preview: {repr(content[:100])}")
+            # Verify cleaning worked
+            logger.error(f"CLEANED SUBJECT: {repr(subject)}")
+            logger.error(f"CLEANED CONTENT (first 200 chars): {repr(content[:200])}")
             
-            # Verify no problematic characters remain
+            # Double-check for problematic characters
+            for i, char in enumerate(subject):
+                if ord(char) > 127:
+                    logger.error(f"SUBJECT still has non-ASCII at position {i}: {repr(char)}")
+            
+            for i, char in enumerate(content[:1000]):  # Check first 1000 chars
+                if ord(char) > 127:
+                    logger.error(f"CONTENT still has non-ASCII at position {i}: {repr(char)}")
+                    break  # Stop after first problematic char to avoid spam
+            
+            # Triple-check with encoding test
             try:
                 subject.encode('ascii')
                 content.encode('ascii')
+                logger.info("Both subject and content are ASCII-safe")
             except UnicodeEncodeError as e:
-                logger.error(f"Still have encoding issues after cleaning: {e}")
-                # Force brutal ASCII conversion
-                subject = subject.encode('ascii', errors='replace').decode('ascii')
-                content = content.encode('ascii', errors='replace').decode('ascii')
+                logger.error(f"ENCODING CHECK FAILED: {e}")
+                return False
             
-            # Create message with ASCII charset to be safe
-            msg = MIMEMultipart('alternative')
+            # Create the most basic possible email message
+            msg = MIMEText(content if not is_html else content, 'html' if is_html else 'plain', 'ascii')
             msg['From'] = self.from_email
             msg['To'] = to_email
             msg['Subject'] = subject
             
-            # Use ASCII charset for maximum compatibility
-            if is_html:
-                html_part = MIMEText(content, 'html', 'ascii')
-                msg.attach(html_part)
-            else:
-                text_part = MIMEText(content, 'plain', 'ascii')
-                msg.attach(text_part)
-            
-            # Send email
+            # Send with maximum safety
             with smtplib.SMTP(self.smtp_host, self.smtp_port) as server:
                 server.starttls()
                 server.login(self.smtp_username, self.smtp_password)
-                # Convert message to string with ASCII encoding
+                
+                # Get the message as ASCII string
                 msg_string = msg.as_string()
-                server.sendmail(self.from_email, [to_email], msg_string.encode('ascii', errors='replace'))
+                
+                # Final encoding check on the message itself
+                try:
+                    msg_bytes = msg_string.encode('ascii')
+                    logger.info(f"Message successfully encoded to ASCII ({len(msg_bytes)} bytes)")
+                except UnicodeEncodeError as e:
+                    logger.error(f"MESSAGE ENCODING FAILED: {e}")
+                    logger.error(f"Problematic message part: {repr(msg_string[max(0, e.start-20):e.end+20])}")
+                    return False
+                
+                # Send the message
+                server.sendmail(self.from_email, [to_email], msg_bytes)
             
             logger.info(f"Email sent successfully to {to_email}")
             return True
             
         except Exception as e:
             logger.error(f"Failed to send email to {to_email}: {str(e)}")
-            # Log the actual problematic content for debugging
-            if "ascii" in str(e).lower():
-                logger.error("ASCII encoding issue detected. Check your episode data for Unicode characters.")
-                # You might want to inspect the raw episode data here
+            logger.error(f"Error type: {type(e).__name__}")
+            
+            # If it's a Unicode error, log more details
+            if isinstance(e, UnicodeEncodeError):
+                logger.error(f"Unicode error details: start={e.start}, end={e.end}, object={repr(e.object[max(0,e.start-10):e.end+10])}")
+            
             return False
+        
+    # Also add this debugging method to find the source of the problem
+    def debug_episode_data(self, episodes: List[Dict]) -> None:
+        """Debug method to find Unicode characters in episode data"""
+        logger.error("=== DEBUGGING EPISODE DATA FOR UNICODE ===")
+        
+        for i, episode_data in enumerate(episodes):
+            logger.error(f"--- Episode {i} ---")
+            
+            # Check all string fields in episode data
+            episode = episode_data.get('episode', {})
+            
+            fields_to_check = [
+                ('summary', episode_data.get('summary', '')),
+                ('episode_name', episode.get('name', '')),
+                ('show_name', episode.get('show', {}).get('name', '')),
+                ('description', episode.get('description', '')),
+            ]
+            
+            for field_name, field_value in fields_to_check:
+                if field_value:
+                    field_str = str(field_value)
+                    for j, char in enumerate(field_str):
+                        if ord(char) > 127:
+                            logger.error(f"{field_name} has non-ASCII at pos {j}: {repr(char)} (code: {ord(char)})")
+                            logger.error(f"{field_name} context: {repr(field_str[max(0,j-10):j+10])}")
+                            break  # Just show first problematic char per field
     
     def _generate_summary_html(self, episodes: List[Dict], template: str) -> str:
         """Generate HTML content for episode summary with extra cleaning"""
