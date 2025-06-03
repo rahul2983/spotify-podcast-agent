@@ -235,14 +235,30 @@ class EmailMCPServer(MCPServer):
         text = text.replace('\u2019', "'")  # right single quote
         text = text.replace('\u201c', '"')  # left double quote
         text = text.replace('\u201d', '"')  # right double quote
+        text = text.replace('\u2026', '...')  # ellipsis
+        text = text.replace('\u00a9', '(c)')  # copyright symbol
+        text = text.replace('\u00ae', '(R)')  # registered trademark
         
-        # Ensure it's properly encoded
-        try:
-            text.encode('ascii')
-            return text
-        except UnicodeEncodeError:
-            # If still has non-ASCII, encode to ASCII with replacement
-            return text.encode('ascii', errors='replace').decode('ascii')
+        # Handle other common Unicode characters
+        import unicodedata
+        # Normalize unicode characters (converts accented chars to base + combining)
+        text = unicodedata.normalize('NFKD', text)
+        
+        # Remove or replace any remaining problematic characters
+        # Instead of trying to encode to ASCII, just remove non-printable chars
+        cleaned_chars = []
+        for char in text:
+            # Keep printable ASCII characters and common Unicode chars
+            if ord(char) < 127 or char.isprintable():
+                cleaned_chars.append(char)
+            else:
+                # Replace with space or appropriate substitute
+                if char.isspace():
+                    cleaned_chars.append(' ')
+                else:
+                    cleaned_chars.append('?')  # or just skip with: continue
+        
+        return ''.join(cleaned_chars)
     
     async def _send_email(self, to_email: str, subject: str, content: str, is_html: bool = False) -> bool:
         """Send email using SMTP with proper UTF-8 handling"""
@@ -251,7 +267,7 @@ class EmailMCPServer(MCPServer):
                 logger.error("SMTP credentials not configured")
                 return False
             
-            # Clean subject and content
+            # Clean subject and content - but keep UTF-8 support
             subject = self._clean_text(subject)
             content = self._clean_text(content)
             
@@ -261,7 +277,7 @@ class EmailMCPServer(MCPServer):
             msg['To'] = to_email
             msg['Subject'] = subject
             
-            # Add content with proper charset
+            # Add content with proper charset - this is the key fix
             if is_html:
                 html_part = MIMEText(content, 'html', 'utf-8')
                 msg.attach(html_part)
@@ -269,14 +285,47 @@ class EmailMCPServer(MCPServer):
                 text_part = MIMEText(content, 'plain', 'utf-8')
                 msg.attach(text_part)
             
-            # Send email
+            # Send email with proper encoding
             with smtplib.SMTP(self.smtp_host, self.smtp_port) as server:
                 server.starttls()
                 server.login(self.smtp_username, self.smtp_password)
+                # Use send_message instead of sendmail for better Unicode handling
                 server.send_message(msg)
             
             logger.info(f"Email sent successfully to {to_email}")
             return True
+            
+        except UnicodeEncodeError as e:
+            logger.error(f"Unicode encoding error sending email to {to_email}: {str(e)}")
+            # Try with more aggressive cleaning
+            try:
+                # Fallback: encode to ASCII with replacement
+                subject_clean = subject.encode('ascii', errors='replace').decode('ascii')
+                content_clean = content.encode('ascii', errors='replace').decode('ascii')
+                
+                msg = MIMEMultipart('alternative')
+                msg['From'] = self.from_email
+                msg['To'] = to_email
+                msg['Subject'] = subject_clean
+                
+                if is_html:
+                    html_part = MIMEText(content_clean, 'html', 'ascii')
+                    msg.attach(html_part)
+                else:
+                    text_part = MIMEText(content_clean, 'plain', 'ascii')
+                    msg.attach(text_part)
+                
+                with smtplib.SMTP(self.smtp_host, self.smtp_port) as server:
+                    server.starttls()
+                    server.login(self.smtp_username, self.smtp_password)
+                    server.send_message(msg)
+                
+                logger.info(f"Email sent successfully to {to_email} (with ASCII fallback)")
+                return True
+                
+            except Exception as fallback_e:
+                logger.error(f"Failed even with ASCII fallback: {str(fallback_e)}")
+                return False
             
         except Exception as e:
             logger.error(f"Failed to send email to {to_email}: {str(e)}")
