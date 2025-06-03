@@ -379,31 +379,48 @@ class EmailMCPServer(MCPServer):
                 logger.error(f"ENCODING CHECK FAILED: {e}")
                 return False
             
-            # Create the most basic possible email message
-            msg = MIMEText(content if not is_html else content, 'html' if is_html else 'plain', 'ascii')
-            msg['From'] = self.from_email
-            msg['To'] = to_email
-            msg['Subject'] = subject
+            # Create email message with extreme ASCII safety
+            # Clean the email addresses too
+            clean_from_email = self._clean_text(str(self.from_email))
+            clean_to_email = self._clean_text(str(to_email))
+            
+            # Use raw string construction instead of MIMEText to avoid encoding issues
+            if is_html:
+                raw_message = f"""From: {clean_from_email}
+To: {clean_to_email}
+Subject: {subject}
+Content-Type: text/html; charset=ascii
+MIME-Version: 1.0
+
+{content}"""
+            else:
+                raw_message = f"""From: {clean_from_email}
+To: {clean_to_email}
+Subject: {subject}
+Content-Type: text/plain; charset=ascii
+MIME-Version: 1.0
+
+{content}"""
+            
+            # Final brutal cleaning of the entire message
+            raw_message = self._clean_text(raw_message)
+            
+            # Final encoding check on the entire message
+            try:
+                msg_bytes = raw_message.encode('ascii')
+                logger.info(f"Raw message successfully encoded to ASCII ({len(msg_bytes)} bytes)")
+            except UnicodeEncodeError as e:
+                logger.error(f"RAW MESSAGE ENCODING FAILED: {e}")
+                logger.error(f"Problematic message part: {repr(raw_message[max(0, e.start-20):e.end+20])}")
+                return False
             
             # Send with maximum safety
             with smtplib.SMTP(self.smtp_host, self.smtp_port) as server:
                 server.starttls()
                 server.login(self.smtp_username, self.smtp_password)
                 
-                # Get the message as ASCII string
-                msg_string = msg.as_string()
-                
-                # Final encoding check on the message itself
-                try:
-                    msg_bytes = msg_string.encode('ascii')
-                    logger.info(f"Message successfully encoded to ASCII ({len(msg_bytes)} bytes)")
-                except UnicodeEncodeError as e:
-                    logger.error(f"MESSAGE ENCODING FAILED: {e}")
-                    logger.error(f"Problematic message part: {repr(msg_string[max(0, e.start-20):e.end+20])}")
-                    return False
-                
-                # Send the message
-                server.sendmail(self.from_email, [to_email], msg_bytes)
+                # Send the raw message bytes
+                server.sendmail(clean_from_email, [clean_to_email], msg_bytes)
             
             logger.info(f"Email sent successfully to {to_email}")
             return True
