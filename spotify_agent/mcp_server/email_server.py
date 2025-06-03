@@ -1,5 +1,5 @@
 """
-MCP Server for Email operations
+MCP Server for Email operations - FIXED VERSION
 """
 from typing import Dict, Any, List
 from datetime import datetime
@@ -222,12 +222,38 @@ class EmailMCPServer(MCPServer):
             logger.error(f"Error sending weekly digest: {str(e)}")
             return {"success": False, "message": f"Error: {str(e)}"}
     
+    def _clean_text(self, text: str) -> str:
+        """Clean text to remove problematic characters"""
+        if not text:
+            return ""
+        
+        # Replace non-breaking spaces and other problematic Unicode chars
+        text = text.replace('\xa0', ' ')  # non-breaking space
+        text = text.replace('\u2013', '-')  # en dash
+        text = text.replace('\u2014', '--')  # em dash
+        text = text.replace('\u2018', "'")  # left single quote
+        text = text.replace('\u2019', "'")  # right single quote
+        text = text.replace('\u201c', '"')  # left double quote
+        text = text.replace('\u201d', '"')  # right double quote
+        
+        # Ensure it's properly encoded
+        try:
+            text.encode('ascii')
+            return text
+        except UnicodeEncodeError:
+            # If still has non-ASCII, encode to ASCII with replacement
+            return text.encode('ascii', errors='replace').decode('ascii')
+    
     async def _send_email(self, to_email: str, subject: str, content: str, is_html: bool = False) -> bool:
-        """Send email using SMTP"""
+        """Send email using SMTP with proper UTF-8 handling"""
         try:
             if not self.smtp_username or not self.smtp_password:
                 logger.error("SMTP credentials not configured")
                 return False
+            
+            # Clean subject and content
+            subject = self._clean_text(subject)
+            content = self._clean_text(content)
             
             # Create message
             msg = MIMEMultipart('alternative')
@@ -235,11 +261,13 @@ class EmailMCPServer(MCPServer):
             msg['To'] = to_email
             msg['Subject'] = subject
             
-            # Add content
+            # Add content with proper charset
             if is_html:
-                msg.attach(MIMEText(content, 'html'))
+                html_part = MIMEText(content, 'html', 'utf-8')
+                msg.attach(html_part)
             else:
-                msg.attach(MIMEText(content, 'plain'))
+                text_part = MIMEText(content, 'plain', 'utf-8')
+                msg.attach(text_part)
             
             # Send email
             with smtplib.SMTP(self.smtp_host, self.smtp_port) as server:
@@ -260,23 +288,28 @@ class EmailMCPServer(MCPServer):
         
         for i, episode_data in enumerate(episodes, 1):
             episode = episode_data.get('episode', {})
-            summary = episode_data.get('summary', 'No summary available')
+            summary = self._clean_text(episode_data.get('summary', 'No summary available'))
             relevance_score = episode_data.get('relevance_score', 0)
+            episode_name = self._clean_text(episode.get('name', 'Unknown Episode'))
+            show_name = self._clean_text(episode.get('show', {}).get('name', 'Unknown Show'))
+            description = self._clean_text(episode.get('description', ''))
             
             episodes_html += f"""
             <div style="border: 1px solid #ddd; border-radius: 8px; padding: 20px; margin: 15px 0; background: #f9f9f9;">
-                <h3 style="color: #1db954; margin-top: 0;">{i}. {episode.get('name', 'Unknown Episode')}</h3>
+                <h3 style="color: #1db954; margin-top: 0;">{i}. {episode_name}</h3>
                 <p style="color: #666; font-size: 14px;">
-                    <strong>Show:</strong> {episode.get('show', {}).get('name', 'Unknown Show')}<br>
+                    <strong>Show:</strong> {show_name}<br>
                     <strong>Duration:</strong> {self._format_duration(episode.get('duration_ms', 0))}<br>
                     <strong>Relevance Score:</strong> {relevance_score:.1f}/1.0
                 </p>
                 <p style="line-height: 1.6;">{summary}</p>
                 <p style="color: #888; font-size: 12px; font-style: italic;">
-                    {episode.get('description', '')[:200]}{'...' if len(episode.get('description', '')) > 200 else ''}
+                    {description[:200]}{'...' if len(description) > 200 else ''}
                 </p>
             </div>
             """
+        
+        current_time = datetime.now().strftime('%A, %B %d, %Y')
         
         return f"""
         <!DOCTYPE html>
@@ -288,7 +321,7 @@ class EmailMCPServer(MCPServer):
         <body style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
             <h1 style="color: #1db954; text-align: center;">🎵 Your Daily Podcast Summary</h1>
             <p style="text-align: center; color: #666;">
-                {datetime.now().strftime('%A, %B %d, %Y')}
+                {current_time}
             </p>
             
             <div style="background: #1db954; color: white; padding: 15px; border-radius: 8px; text-align: center; margin: 20px 0;">
@@ -305,7 +338,7 @@ class EmailMCPServer(MCPServer):
             </div>
             
             <p style="text-align: center; color: #999; font-size: 12px; margin-top: 30px;">
-                Powered by MCP Spotify Podcast Agent
+                Powered by Enhanced MCP Spotify Podcast Agent
             </p>
         </body>
         </html>
@@ -320,11 +353,14 @@ class EmailMCPServer(MCPServer):
         episodes_html = ""
         for i, episode_data in enumerate(episodes, 1):
             episode = episode_data.get('episode', {})
+            episode_name = self._clean_text(episode.get('name', 'Unknown'))
+            show_name = self._clean_text(episode.get('show', {}).get('name', 'Unknown Show'))
+            
             episodes_html += f"""
             <li style="margin: 10px 0;">
-                <strong>{episode.get('name', 'Unknown')}</strong> 
+                <strong>{episode_name}</strong> 
                 ({self._format_duration(episode.get('duration_ms', 0))})
-                <br><span style="color: #666; font-size: 14px;">{episode.get('show', {}).get('name', 'Unknown Show')}</span>
+                <br><span style="color: #666; font-size: 14px;">{show_name}</span>
             </li>
             """
         
@@ -339,16 +375,16 @@ class EmailMCPServer(MCPServer):
             <h1 style="color: #1db954; text-align: center;">📊 Your Weekly Podcast Digest</h1>
             
             <div style="background: #1db954; color: white; padding: 20px; border-radius: 8px; margin: 20px 0;">
-                <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; text-align: center;">
-                    <div>
+                <div style="text-align: center;">
+                    <div style="margin: 10px;">
                         <h3 style="margin: 0; font-size: 24px;">{total_episodes}</h3>
                         <p style="margin: 5px 0 0 0;">Episodes</p>
                     </div>
-                    <div>
+                    <div style="margin: 10px;">
                         <h3 style="margin: 0; font-size: 24px;">{self._format_duration(total_duration)}</h3>
                         <p style="margin: 5px 0 0 0;">Total Time</p>
                     </div>
-                    <div>
+                    <div style="margin: 10px;">
                         <h3 style="margin: 0; font-size: 24px;">{avg_score:.1f}/1.0</h3>
                         <p style="margin: 5px 0 0 0;">Avg Score</p>
                     </div>
