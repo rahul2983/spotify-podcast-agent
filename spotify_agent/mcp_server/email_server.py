@@ -191,9 +191,9 @@ class EmailMCPServer(MCPServer):
         test_cases = [
             "Simple ASCII text",
             "Text with\xa0non-breaking space",
-            "Text with — em dash",
-            "Text with "smart quotes"",
-            "Text with…ellipsis",
+            "Text with \u2014 em dash",
+            "Text with \u201csmart quotes\u201d",
+            "Text with\u2026ellipsis",
         ]
         
         for i, test_content in enumerate(test_cases):
