@@ -831,4 +831,56 @@ async def debug_test_email():
         current_agent = get_agent()
         
         if not current_agent.email_enabled:
-            raise HTTP
+            # raise HTTPException(status_code=400, detail="Email not configured")
+            raise HTTPException(status_code=400, detail="message")
+        
+        # Get the user email
+        user_email = getattr(current_agent.config, 'user_email', None)
+        if not user_email:
+            raise HTTPException(status_code=400, detail="User email not configured")
+        
+        # Call the debug test method via MCP
+        result = await current_agent.mcp_client.send_request(
+            "email", "tools/call",
+            {
+                "name": "test_email_with_debug",
+                "arguments": {
+                    "to_email": user_email
+                }
+            }
+        )
+        return {
+            "status": "completed",
+            "message": "Debug test completed - check logs for detailed Unicode analysis",
+            "result": result,
+            "instructions": [
+                "📋 Check your application logs for detailed Unicode debugging info",
+                "🔍 Look for lines containing 'Non-ASCII character' to identify problems",
+                "📧 A simple test email should have been sent if successful",
+                "⚠️ If test failed, the logs will show exactly which characters are problematic"
+            ]
+        }
+    # except HTTPException:
+    #     raise
+    except Exception as e:
+        logger.error(f"Debug test failed: {str(e)}")
+        return {
+            "status": "error", 
+            "error": str(e),
+            "message": "Debug test failed - check logs for details"
+        }
+
+def start_api():
+    """Start the enhanced MCP-enabled API server"""
+    port = int(os.environ.get("PORT", 8000))
+    
+    uvicorn.run(
+        "spotify_agent.mcp_api.enhanced_api:app",
+        host="0.0.0.0", 
+        port=port,
+        reload=False,
+        workers=1
+    )
+
+if __name__ == "__main__":
+    start_api()
