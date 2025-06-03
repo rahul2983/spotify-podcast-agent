@@ -8,6 +8,8 @@ from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 import os
 import logging
+import re
+import unicodedata
 
 from .protocol import MCPServer, MCPMessage, MCPResource, MCPTool, MCPMessageType
 
@@ -168,15 +170,94 @@ class EmailMCPServer(MCPServer):
         else:
             raise ValueError(f"Unknown tool: {name}")
     
+    def _clean_text(self, text: str) -> str:
+        """Clean text to remove ALL problematic characters - aggressive approach"""
+        if not text:
+            return ""
+        
+        # Convert to string if not already
+        text = str(text)
+        
+        # Debug: Log what we're cleaning
+        logger.debug(f"Original text (first 100 chars): {repr(text[:100])}")
+        
+        # Step 1: Replace ALL Unicode whitespace with regular space
+        # This is more comprehensive than just replacing \xa0
+        text = re.sub(r'\s+', ' ', text)  # Replace any whitespace sequence with single space
+        
+        # Step 2: Replace specific problematic characters
+        replacements = {
+            '\xa0': ' ',     # non-breaking space
+            '\u00a0': ' ',   # another way to represent non-breaking space
+            '\u2013': '-',   # en dash
+            '\u2014': '--',  # em dash
+            '\u2018': "'",   # left single quote
+            '\u2019': "'",   # right single quote
+            '\u201c': '"',   # left double quote
+            '\u201d': '"',   # right double quote
+            '\u2026': '...',  # ellipsis
+            '\u00a9': '(c)', # copyright symbol
+            '\u00ae': '(R)', # registered trademark
+            '\u2122': '(TM)', # trademark
+        }
+        
+        for old, new in replacements.items():
+            text = text.replace(old, new)
+        
+        # Step 3: Normalize unicode
+        text = unicodedata.normalize('NFKD', text)
+        
+        # Step 4: AGGRESSIVE cleaning - only keep safe characters
+        safe_chars = []
+        for i, char in enumerate(text):
+            char_code = ord(char)
+            if char_code <= 127:  # Pure ASCII
+                safe_chars.append(char)
+            elif char.isprintable() and not unicodedata.combining(char):
+                # For non-ASCII chars, replace with closest ASCII equivalent or remove
+                if char_code == 160:  # Another non-breaking space variant
+                    safe_chars.append(' ')
+                else:
+                    # Try to get ASCII equivalent
+                    ascii_equiv = unicodedata.normalize('NFKD', char).encode('ascii', 'ignore').decode('ascii')
+                    if ascii_equiv:
+                        safe_chars.append(ascii_equiv)
+                    else:
+                        safe_chars.append('?')  # Replace with ? or skip entirely
+            # Skip combining characters and other problematic chars
+        
+        result = ''.join(safe_chars)
+        
+        # Step 5: Final check - ensure no problematic characters remain
+        try:
+            result.encode('ascii')
+            logger.debug(f"Cleaned text (first 100 chars): {repr(result[:100])}")
+            return result
+        except UnicodeEncodeError as e:
+            logger.error(f"Text still contains non-ASCII after cleaning: {e}")
+            # Last resort: force ASCII
+            return result.encode('ascii', errors='replace').decode('ascii')
+    
     async def _send_summary_email(self, to_email: str, episodes: List[Dict], 
                                  subject: str, template: str) -> Dict[str, Any]:
-        """Send episode summary email"""
+        """Send episode summary email with enhanced debugging"""
         try:
             if not episodes:
                 return {"success": False, "message": "No episodes to summarize"}
             
-            # Generate HTML email content
+            # Debug each episode for problematic characters BEFORE processing
+            for i, ep in enumerate(episodes):
+                ep_name = str(ep.get('episode', {}).get('name', ''))
+                summary = str(ep.get('summary', ''))
+                if '\xa0' in ep_name or '\xa0' in summary:
+                    logger.error(f"Found \\xa0 in episode {i}: name={repr(ep_name[:50])}, summary={repr(summary[:50])}")
+            
+            # Generate HTML email content with aggressive cleaning
             html_content = self._generate_summary_html(episodes, template)
+            
+            # Debug the final content
+            logger.error(f"DEBUG - Subject: {repr(subject)}")
+            logger.error(f"DEBUG - Content preview: {repr(html_content[:200])}")
             
             # Send email
             success = await self._send_email(to_email, subject, html_content, is_html=True)
@@ -222,126 +303,81 @@ class EmailMCPServer(MCPServer):
             logger.error(f"Error sending weekly digest: {str(e)}")
             return {"success": False, "message": f"Error: {str(e)}"}
     
-    def _clean_text(self, text: str) -> str:
-        """Clean text to remove problematic characters"""
-        if not text:
-            return ""
-        
-        # Replace non-breaking spaces and other problematic Unicode chars
-        text = text.replace('\xa0', ' ')  # non-breaking space
-        text = text.replace('\u2013', '-')  # en dash
-        text = text.replace('\u2014', '--')  # em dash
-        text = text.replace('\u2018', "'")  # left single quote
-        text = text.replace('\u2019', "'")  # right single quote
-        text = text.replace('\u201c', '"')  # left double quote
-        text = text.replace('\u201d', '"')  # right double quote
-        text = text.replace('\u2026', '...')  # ellipsis
-        text = text.replace('\u00a9', '(c)')  # copyright symbol
-        text = text.replace('\u00ae', '(R)')  # registered trademark
-        
-        # Handle other common Unicode characters
-        import unicodedata
-        # Normalize unicode characters (converts accented chars to base + combining)
-        text = unicodedata.normalize('NFKD', text)
-        
-        # Remove or replace any remaining problematic characters
-        # Instead of trying to encode to ASCII, just remove non-printable chars
-        cleaned_chars = []
-        for char in text:
-            # Keep printable ASCII characters and common Unicode chars
-            if ord(char) < 127 or char.isprintable():
-                cleaned_chars.append(char)
-            else:
-                # Replace with space or appropriate substitute
-                if char.isspace():
-                    cleaned_chars.append(' ')
-                else:
-                    cleaned_chars.append('?')  # or just skip with: continue
-        
-        return ''.join(cleaned_chars)
-    
     async def _send_email(self, to_email: str, subject: str, content: str, is_html: bool = False) -> bool:
-        """Send email using SMTP with proper UTF-8 handling"""
+        """Send email using SMTP with bulletproof encoding"""
         try:
             if not self.smtp_username or not self.smtp_password:
                 logger.error("SMTP credentials not configured")
                 return False
             
-            # Clean subject and content - but keep UTF-8 support
-            subject = self._clean_text(subject)
-            content = self._clean_text(content)
+            # AGGRESSIVE cleaning
+            subject = self._clean_text(str(subject))
+            content = self._clean_text(str(content))
             
-            # Create message
+            # Debug the cleaned content
+            logger.debug(f"Final subject: {repr(subject[:50])}")
+            logger.debug(f"Final content preview: {repr(content[:100])}")
+            
+            # Verify no problematic characters remain
+            try:
+                subject.encode('ascii')
+                content.encode('ascii')
+            except UnicodeEncodeError as e:
+                logger.error(f"Still have encoding issues after cleaning: {e}")
+                # Force brutal ASCII conversion
+                subject = subject.encode('ascii', errors='replace').decode('ascii')
+                content = content.encode('ascii', errors='replace').decode('ascii')
+            
+            # Create message with ASCII charset to be safe
             msg = MIMEMultipart('alternative')
             msg['From'] = self.from_email
             msg['To'] = to_email
             msg['Subject'] = subject
             
-            # Add content with proper charset - this is the key fix
+            # Use ASCII charset for maximum compatibility
             if is_html:
-                html_part = MIMEText(content, 'html', 'utf-8')
+                html_part = MIMEText(content, 'html', 'ascii')
                 msg.attach(html_part)
             else:
-                text_part = MIMEText(content, 'plain', 'utf-8')
+                text_part = MIMEText(content, 'plain', 'ascii')
                 msg.attach(text_part)
             
-            # Send email with proper encoding
+            # Send email
             with smtplib.SMTP(self.smtp_host, self.smtp_port) as server:
                 server.starttls()
                 server.login(self.smtp_username, self.smtp_password)
-                # Use send_message instead of sendmail for better Unicode handling
-                server.send_message(msg)
+                # Convert message to string with ASCII encoding
+                msg_string = msg.as_string()
+                server.sendmail(self.from_email, [to_email], msg_string.encode('ascii', errors='replace'))
             
             logger.info(f"Email sent successfully to {to_email}")
             return True
             
-        except UnicodeEncodeError as e:
-            logger.error(f"Unicode encoding error sending email to {to_email}: {str(e)}")
-            # Try with more aggressive cleaning
-            try:
-                # Fallback: encode to ASCII with replacement
-                subject_clean = subject.encode('ascii', errors='replace').decode('ascii')
-                content_clean = content.encode('ascii', errors='replace').decode('ascii')
-                
-                msg = MIMEMultipart('alternative')
-                msg['From'] = self.from_email
-                msg['To'] = to_email
-                msg['Subject'] = subject_clean
-                
-                if is_html:
-                    html_part = MIMEText(content_clean, 'html', 'ascii')
-                    msg.attach(html_part)
-                else:
-                    text_part = MIMEText(content_clean, 'plain', 'ascii')
-                    msg.attach(text_part)
-                
-                with smtplib.SMTP(self.smtp_host, self.smtp_port) as server:
-                    server.starttls()
-                    server.login(self.smtp_username, self.smtp_password)
-                    server.send_message(msg)
-                
-                logger.info(f"Email sent successfully to {to_email} (with ASCII fallback)")
-                return True
-                
-            except Exception as fallback_e:
-                logger.error(f"Failed even with ASCII fallback: {str(fallback_e)}")
-                return False
-            
         except Exception as e:
             logger.error(f"Failed to send email to {to_email}: {str(e)}")
+            # Log the actual problematic content for debugging
+            if "ascii" in str(e).lower():
+                logger.error("ASCII encoding issue detected. Check your episode data for Unicode characters.")
+                # You might want to inspect the raw episode data here
             return False
     
     def _generate_summary_html(self, episodes: List[Dict], template: str) -> str:
-        """Generate HTML content for episode summary"""
+        """Generate HTML content for episode summary with extra cleaning"""
         episodes_html = ""
         
         for i, episode_data in enumerate(episodes, 1):
             episode = episode_data.get('episode', {})
-            summary = self._clean_text(episode_data.get('summary', 'No summary available'))
+            
+            # Clean ALL text fields thoroughly
+            summary = self._clean_text(str(episode_data.get('summary', 'No summary available')))
             relevance_score = episode_data.get('relevance_score', 0)
-            episode_name = self._clean_text(episode.get('name', 'Unknown Episode'))
-            show_name = self._clean_text(episode.get('show', {}).get('name', 'Unknown Show'))
-            description = self._clean_text(episode.get('description', ''))
+            episode_name = self._clean_text(str(episode.get('name', 'Unknown Episode')))
+            show_name = self._clean_text(str(episode.get('show', {}).get('name', 'Unknown Show')))
+            description = self._clean_text(str(episode.get('description', '')))
+            
+            # Debug log the cleaned content
+            logger.debug(f"Episode {i} cleaned - Name: {repr(episode_name[:50])}")
+            logger.debug(f"Episode {i} cleaned - Summary: {repr(summary[:50])}")
             
             episodes_html += f"""
             <div style="border: 1px solid #ddd; border-radius: 8px; padding: 20px; margin: 15px 0; background: #f9f9f9;">
@@ -360,7 +396,7 @@ class EmailMCPServer(MCPServer):
         
         current_time = datetime.now().strftime('%A, %B %d, %Y')
         
-        return f"""
+        html_content = f"""
         <!DOCTYPE html>
         <html>
         <head>
@@ -392,6 +428,9 @@ class EmailMCPServer(MCPServer):
         </body>
         </html>
         """
+        
+        # Final cleaning of the entire HTML
+        return self._clean_text(html_content)
     
     def _generate_weekly_digest_html(self, episodes: List[Dict], stats: Dict[str, Any]) -> str:
         """Generate HTML content for weekly digest"""
@@ -402,8 +441,8 @@ class EmailMCPServer(MCPServer):
         episodes_html = ""
         for i, episode_data in enumerate(episodes, 1):
             episode = episode_data.get('episode', {})
-            episode_name = self._clean_text(episode.get('name', 'Unknown'))
-            show_name = self._clean_text(episode.get('show', {}).get('name', 'Unknown Show'))
+            episode_name = self._clean_text(str(episode.get('name', 'Unknown')))
+            show_name = self._clean_text(str(episode.get('show', {}).get('name', 'Unknown Show')))
             
             episodes_html += f"""
             <li style="margin: 10px 0;">
@@ -413,7 +452,7 @@ class EmailMCPServer(MCPServer):
             </li>
             """
         
-        return f"""
+        html_content = f"""
         <!DOCTYPE html>
         <html>
         <head>
@@ -453,6 +492,8 @@ class EmailMCPServer(MCPServer):
         </body>
         </html>
         """
+        
+        return self._clean_text(html_content)
     
     def _format_duration(self, duration_ms: int) -> str:
         """Format duration from milliseconds to human readable"""
