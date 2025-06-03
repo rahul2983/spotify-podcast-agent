@@ -379,48 +379,59 @@ class EmailMCPServer(MCPServer):
                 logger.error(f"ENCODING CHECK FAILED: {e}")
                 return False
             
-            # Create email message with extreme ASCII safety
-            # Clean the email addresses too
-            clean_from_email = self._clean_text(str(self.from_email))
-            clean_to_email = self._clean_text(str(to_email))
+            # COMPLETELY DIFFERENT APPROACH: Use MIMEText but with brutal ASCII forcing
+            msg = MIMEText('', 'plain', 'ascii')  # Start with empty ASCII message
             
-            # Use raw string construction instead of MIMEText to avoid encoding issues
-            if is_html:
-                raw_message = f"""From: {clean_from_email}
-To: {clean_to_email}
-Subject: {subject}
-Content-Type: text/html; charset=ascii
-MIME-Version: 1.0
-
-{content}"""
-            else:
-                raw_message = f"""From: {clean_from_email}
-To: {clean_to_email}
-Subject: {subject}
-Content-Type: text/plain; charset=ascii
-MIME-Version: 1.0
-
-{content}"""
+            # Manually set headers using only ASCII-safe strings
+            msg['From'] = self._clean_text(str(self.from_email))
+            msg['To'] = self._clean_text(str(to_email))
+            msg['Subject'] = subject
             
-            # Final brutal cleaning of the entire message
-            raw_message = self._clean_text(raw_message)
+            # Set the payload manually
+            msg.set_payload(content)
             
-            # Final encoding check on the entire message
+            # Force ASCII charset
+            msg.set_charset('ascii')
+            
+            # Convert to string and clean AGAIN
             try:
-                msg_bytes = raw_message.encode('ascii')
-                logger.info(f"Raw message successfully encoded to ASCII ({len(msg_bytes)} bytes)")
-            except UnicodeEncodeError as e:
-                logger.error(f"RAW MESSAGE ENCODING FAILED: {e}")
-                logger.error(f"Problematic message part: {repr(raw_message[max(0, e.start-20):e.end+20])}")
+                msg_string = str(msg)
+                msg_string = self._clean_text(msg_string)
+                
+                # Final encoding test
+                msg_bytes = msg_string.encode('ascii', errors='replace')
+                logger.info(f"Message encoded with ASCII replacement ({len(msg_bytes)} bytes)")
+                
+            except Exception as e:
+                logger.error(f"Message string conversion failed: {e}")
                 return False
             
-            # Send with maximum safety
+            # Send with maximum safety and ASCII-only credentials
             with smtplib.SMTP(self.smtp_host, self.smtp_port) as server:
                 server.starttls()
-                server.login(self.smtp_username, self.smtp_password)
                 
-                # Send the raw message bytes
-                server.sendmail(clean_from_email, [clean_to_email], msg_bytes)
+                # Clean SMTP credentials - this might be the source!
+                clean_username = self._clean_text(str(self.smtp_username))
+                clean_password = self._clean_text(str(self.smtp_password))
+                clean_from = self._clean_text(str(self.from_email))
+                clean_to = self._clean_text(str(to_email))
+                
+                logger.error(f"SMTP CREDENTIALS - Username: {repr(clean_username[:10])}...")
+                
+                try:
+                    clean_username.encode('ascii')
+                    clean_password.encode('ascii')
+                    logger.info("SMTP credentials are ASCII-safe")
+                except UnicodeEncodeError as e:
+                    logger.error(f"SMTP CREDENTIALS have Unicode: {e}")
+                    # Force clean them
+                    clean_username = clean_username.encode('ascii', errors='replace').decode('ascii')
+                    clean_password = clean_password.encode('ascii', errors='replace').decode('ascii')
+                
+                server.login(clean_username, clean_password)
+                
+                # Send with ASCII-cleaned addresses
+                server.sendmail(clean_from, [clean_to], msg_bytes)
             
             logger.info(f"Email sent successfully to {to_email}")
             return True
