@@ -625,31 +625,3 @@ class EmailMCPServer(MCPServer):
 </html>"""
         
         return self._clean_text(html_content)
-    
-    def _format_duration(self, duration_ms: int) -> str:
-        """Format duration from milliseconds to human readable"""
-        if not duration_ms:
-            return "Unknown"
-        
-        minutes = duration_ms // 60000
-        if minutes < 60:
-            return f"{minutes}m"
-        else:
-            hours = minutes // 60
-            remaining_minutes = minutes % 60
-            return f"{hours}h {remaining_minutes}m"
-    
-    async def _read_resource(self, uri: str) -> Dict[str, Any]:
-        """Read a specific email resource"""
-        if uri == "email://templates":
-            return {
-                "templates": ["default", "minimal", "detailed"],
-                "description": "Available email templates"
-            }
-        elif uri == "email://history":
-            return {
-                "recent_emails": [],
-                "description": "Email sending history (not implemented)"
-            }
-        else:
-            raise ValueError(f"Unknown resource URI: {uri}")
