@@ -225,63 +225,79 @@ class EmailMCPServer(MCPServer):
         }
     
     def _clean_text(self, text: str) -> str:
-        """Ultra-aggressive text cleaning - removes ALL non-ASCII characters"""
+        """Smart text cleaning - preserves HTML structure while removing problematic Unicode"""
         if not text:
             return ""
         
         # Convert to string if not already
         text = str(text)
         
-        # Log the exact problematic characters
+        # Log the exact problematic characters for debugging
+        problematic_chars = []
         for i, char in enumerate(text):
             if ord(char) > 127:
-                logger.error(f"Non-ASCII character at position {i}: {repr(char)} (code: {ord(char)})")
+                problematic_chars.append((i, char, ord(char)))
         
-        # Method 1: Brutal character-by-character filtering
-        ascii_only = ''.join(char if ord(char) < 128 else ' ' for char in text)
+        if problematic_chars:
+            logger.debug(f"Found {len(problematic_chars)} non-ASCII characters in text")
         
-        # Method 2: Multiple replacement passes for stubborn characters
-        replacements = [
-            ('\xa0', ' '),      # non-breaking space
-            ('\u00a0', ' '),    # unicode non-breaking space
-            ('\u2013', '-'),    # en dash
-            ('\u2014', '--'),   # em dash
-            ('\u2018', "'"),    # left single quote
-            ('\u2019', "'"),    # right single quote
-            ('\u201c', '"'),    # left double quote
-            ('\u201d', '"'),    # right double quote
-            ('\u2026', '...'),  # ellipsis
-            ('\u00a9', '(c)'),  # copyright symbol
-            ('\u00ae', '(R)'),  # registered trademark
-            ('\u2122', '(TM)'), # trademark
-        ]
+        # SMART cleaning: Replace only known problematic characters, preserve everything else
+        replacements = {
+            '\xa0': ' ',      # non-breaking space
+            '\u00a0': ' ',    # unicode non-breaking space
+            '\u2013': '-',    # en dash
+            '\u2014': '-',    # em dash (changed from '--' to '-')
+            '\u2018': "'",    # left single quote
+            '\u2019': "'",    # right single quote
+            '\u201c': '"',    # left double quote
+            '\u201d': '"',    # right double quote
+            '\u2026': '...',  # ellipsis
+            '\u00a9': '(c)',  # copyright symbol
+            '\u00ae': '(R)',  # registered trademark
+            '\u2122': '(TM)', # trademark
+            # Add emoji removal only for very common ones
+            '🎵': '',         # musical note
+            '📧': '',         # email
+            '🎧': '',         # headphones
+            '📊': '',         # chart
+        }
         
-        for old, new in replacements:
-            ascii_only = ascii_only.replace(old, new)
+        # Apply targeted replacements
+        cleaned_text = text
+        for old, new in replacements.items():
+            cleaned_text = cleaned_text.replace(old, new)
         
-        # Method 3: Regex to remove any remaining problematic whitespace
+        # Remove any remaining high Unicode characters (but preserve basic HTML and text)
+        # Only remove characters that are definitely problematic
+        final_chars = []
+        for char in cleaned_text:
+            char_code = ord(char)
+            if char_code <= 127:  # Keep all ASCII
+                final_chars.append(char)
+            elif char_code == 160:  # Non-breaking space variants
+                final_chars.append(' ')
+            elif 8192 <= char_code <= 8303:  # Various Unicode spaces and punctuation
+                final_chars.append(' ')
+            elif char_code >= 127000:  # Emoji range
+                final_chars.append('')  # Remove emojis
+            else:
+                # Keep other Unicode characters (like accented letters, etc.)
+                final_chars.append(char)
+        
+        result = ''.join(final_chars)
+        
+        # Normalize multiple spaces
         import re
-        ascii_only = re.sub(r'[\x80-\xFF]', ' ', ascii_only)  # Remove high ASCII
-        ascii_only = re.sub(r'[\u0080-\uFFFF]', ' ', ascii_only)  # Remove Unicode
-        ascii_only = re.sub(r'\s+', ' ', ascii_only)  # Normalize whitespace
+        result = re.sub(r'\s+', ' ', result)
+        result = result.strip()
         
-        # Method 4: Force encode/decode cycle
+        # Final verification - only warn, don't force ASCII
         try:
-            # This will fail if any non-ASCII characters remain
-            ascii_only.encode('ascii')
+            result.encode('utf-8')  # Check UTF-8 instead of ASCII
         except UnicodeEncodeError as e:
-            logger.error(f"STILL HAVE NON-ASCII AFTER CLEANING: {e}")
-            # Nuclear option: byte-level cleaning
-            ascii_only = ascii_only.encode('ascii', errors='replace').decode('ascii')
+            logger.warning(f"Text still has encoding issues: {e}")
         
-        # Final verification
-        final_result = ascii_only.strip()
-        
-        # Log the transformation
-        if text != final_result:
-            logger.error(f"Text transformation: {repr(text[:100])} -> {repr(final_result[:100])}")
-        
-        return final_result
+        return result
     
     # Updated _send_summary_email method with debugging
     async def _send_summary_email(self, to_email: str, episodes: List[Dict], 
@@ -379,10 +395,10 @@ class EmailMCPServer(MCPServer):
                 logger.error(f"ENCODING CHECK FAILED: {e}")
                 return False
             
-            # COMPLETELY DIFFERENT APPROACH: Use MIMEText but with brutal ASCII forcing
-            msg = MIMEText('', 'plain', 'ascii')  # Start with empty ASCII message
+            # BETTER APPROACH: Use UTF-8 encoding instead of forcing ASCII
+            msg = MIMEText('', 'html' if is_html else 'plain', 'utf-8')
             
-            # Manually set headers using only ASCII-safe strings
+            # Manually set headers using cleaned strings
             msg['From'] = self._clean_text(str(self.from_email))
             msg['To'] = self._clean_text(str(to_email))
             msg['Subject'] = subject
@@ -390,17 +406,24 @@ class EmailMCPServer(MCPServer):
             # Set the payload manually
             msg.set_payload(content)
             
-            # Force ASCII charset
-            msg.set_charset('ascii')
+            # Keep UTF-8 charset for better compatibility
+            msg.set_charset('utf-8')
             
-            # Convert to string and clean AGAIN
+            # Convert to string and clean LIGHTLY
             try:
                 msg_string = str(msg)
-                msg_string = self._clean_text(msg_string)
                 
-                # Final encoding test
-                msg_bytes = msg_string.encode('ascii', errors='replace')
-                logger.info(f"Message encoded with ASCII replacement ({len(msg_bytes)} bytes)")
+                # Light cleaning - only remove the most problematic characters
+                msg_string = msg_string.replace('\xa0', ' ')  # Just non-breaking spaces
+                
+                # Try UTF-8 encoding first
+                try:
+                    msg_bytes = msg_string.encode('utf-8')
+                    logger.info(f"Message encoded with UTF-8 ({len(msg_bytes)} bytes)")
+                except UnicodeEncodeError:
+                    # Fallback to ASCII with replacement only if UTF-8 fails
+                    msg_bytes = msg_string.encode('ascii', errors='replace')
+                    logger.info(f"Message encoded with ASCII replacement ({len(msg_bytes)} bytes)")
                 
             except Exception as e:
                 logger.error(f"Message string conversion failed: {e}")
