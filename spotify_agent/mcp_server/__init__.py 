@@ -7,7 +7,18 @@ from .spotify_server import SpotifyMCPServer
 from .llm_server import LLMMCPServer
 from .queue_server import QueueMCPServer
 
+# Enhanced servers - import with fallback
+try:
+    from .email_server import EmailMCPServer
+    from .calendar_server import CalendarMCPServer
+    ENHANCED_SERVERS_AVAILABLE = True
+except ImportError:
+    ENHANCED_SERVERS_AVAILABLE = False
+
 __all__ = [
     'MCPServer', 'MCPClient', 'MCPMessage', 'MCPResource', 'MCPTool',
     'SpotifyMCPServer', 'LLMMCPServer', 'QueueMCPServer'
 ]
+
+if ENHANCED_SERVERS_AVAILABLE:
+    __all__.extend(['EmailMCPServer', 'CalendarMCPServer'])
